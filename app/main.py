@@ -4,21 +4,33 @@ import shutil
 import sys
 import threading
 import tkinter as tk
+import tomllib
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
+import cv2
 import numpy as np
 from PIL import Image
 from scipy.spatial.distance import cdist
 from sklearn.cluster import DBSCAN
 
-from app.config import DEFAULT_FEATURE_WEIGHTS, read_user_settings, save_user_settings
-
-IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp'}
+from app.config import (
+    BACKUP,
+    DEFAULT_FEATURE_WEIGHTS,
+    DRY_RUN,
+    IMAGE_EXTENSIONS,
+    VIDEO_EXTENSIONS,
+    VIDEO_FRAME_PERCENTAGE,
+    read_user_settings,
+    save_user_settings,
+)
 
 __name__ = "Spectra"
 __desc__ = "Visual Similarity Sorter"
-__version__ = "0.1.0"
+with (Path(__file__).parent.parent / "pyproject.toml").open("rb") as pyproject_file:
+    __version__ = tomllib.load(pyproject_file)["project"]["version"]
+
+VIDEO_GRABS_FOLDER = ".spectra_video_grabs"
 
 def extract_color_histogram(img: Image.Image, bins_per_channel: int = 32) -> np.ndarray:
     img_rgb = img.convert('RGB')
@@ -169,6 +181,47 @@ def get_image_files(folder_path: str) -> list[Path]:
 
     return sorted(image_files)
 
+def get_video_image_files(
+    folder_path: str | Path,
+    frame_percentage: int = VIDEO_FRAME_PERCENTAGE,
+) -> list[Path]:
+    folder_path = Path(folder_path)
+    if not folder_path.exists():
+        raise FileNotFoundError(f"Folder not found: {folder_path}")
+
+    if not folder_path.is_dir():
+        raise NotADirectoryError(f"Not a directory: {folder_path}")
+
+    video_files = [
+        f for f in folder_path.iterdir()
+        if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS
+    ]
+
+    if not video_files:
+        return []
+
+    video_grabs_folder = folder_path / VIDEO_GRABS_FOLDER
+    video_grabs_folder.mkdir()
+
+    image_files = []
+    for video_file_path in video_files:
+        video = cv2.VideoCapture(str(video_file_path))
+        frame_count = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+        frame_number = round((frame_count - 1) * frame_percentage / 100)
+        video.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+        _, frame = video.read()
+        video.release()
+
+        image_file_path = video_grabs_folder / f"{video_file_path.name}.png"
+        image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        image.save(image_file_path)
+        image_files.append(image_file_path)
+
+    return sorted(image_files)
+
+
+def cleanup_video_grabs(folder_path: str | Path) -> None:
+    shutil.rmtree(Path(folder_path) / VIDEO_GRABS_FOLDER)
 
 def sort_cluster_internally(cluster_features: np.ndarray, cluster_items: list) -> list:
     if len(cluster_items) <= 1:
@@ -392,11 +445,69 @@ def rename_images(sorted_images: list[tuple[Path, np.ndarray]],
             print(f"✓ Original files backed up to: {backup_folder}")
 
 
+def rename_videos(sorted_images: list[tuple[Path, np.ndarray]],
+                  folder_path: str | Path,
+                  prefix: str = "",
+                  dry_run: bool = False,
+                  backup: bool = True) -> None:
+    folder = Path(folder_path)
+    video_files = [folder / image_path.stem for image_path, _ in sorted_images]
+
+    backup_folder = folder / "backup_originals"
+    if backup and not dry_run:
+        backup_folder.mkdir(exist_ok=True)
+        print(f"\nCreating backup in: {backup_folder}")
+
+    padding = len(str(len(video_files)))
+    temp_names = []
+
+    print(f"\n{'DRY RUN - ' if dry_run else ''}Renaming videos...")
+
+    for i, video_path in enumerate(video_files, 1):
+        temp_name = folder / f"__temp_video_{i:0{padding}d}{video_path.suffix}"
+
+        if not dry_run:
+            if backup:
+                shutil.copy2(video_path, backup_folder / video_path.name)
+            video_path.rename(temp_name)
+
+        temp_names.append(temp_name)
+
+    final_mapping = []
+    for i, (video_path, temp_path) in enumerate(zip(video_files, temp_names), 1):
+        new_name = f"{prefix}{i:0{padding}d}{video_path.suffix}"
+        final_path = folder / new_name
+
+        if not dry_run:
+            temp_path.rename(final_path)
+
+        final_mapping.append((video_path.name, new_name))
+
+        if i <= 5 or i > len(temp_names) - 5:
+            print(f"  {video_path.name} → {new_name}")
+        elif i == 6:
+            print(f"  ... ({len(temp_names) - 10} more) ...")
+
+    mapping_file = folder / "rename_mapping.csv"
+    if not dry_run:
+        with open(mapping_file, 'w', encoding='utf-8') as f:
+            f.write("Original Name,New Name\n")
+            f.writelines(f'"{orig}","{new}"\n' for orig, new in final_mapping)
+        print(f"\nMapping saved to: {mapping_file}")
+
+    if dry_run:
+        print("\n*** DRY RUN COMPLETE - No files were modified ***")
+    else:
+        print(f"\n✓ Successfully renamed {len(video_files)} videos!")
+        if backup:
+            print(f"✓ Original files backed up to: {backup_folder}")
+
+
 class ImageSorterGUI:
     def __init__(self, root):
         self.root = root
         self.root.title(f"{__name__} v{__version__} - {__desc__}")
-        self.root.geometry("700x800")
+        self.root.geometry("700x900")
         self.root.resizable(True, True)
 
         user_settings = read_user_settings()
@@ -410,8 +521,11 @@ class ImageSorterGUI:
         self.spatial_weight = tk.DoubleVar(value=user_settings["spatial_weight"])
         self.texture_weight = tk.DoubleVar(value=user_settings["texture_weight"])
         self.brightness_weight = tk.DoubleVar(value=user_settings["brightness_weight"])
-        self.dry_run = tk.BooleanVar(value=True)
-        self.backup = tk.BooleanVar(value=True)
+        self.video_frame_percentage = tk.IntVar(
+            value=user_settings["video_frame_percentage"]
+        )
+        self.dry_run = tk.BooleanVar(value=user_settings["dry_run"])
+        self.backup = tk.BooleanVar(value=user_settings["backup"])
         self.is_processing = False
 
         self.setup_ui()
@@ -431,7 +545,7 @@ class ImageSorterGUI:
         title.grid(row=row, column=0, columnspan=3, pady=(0, 20))
         row += 1
 
-        ttk.Label(main_frame, text="Image Folder:").grid(row=row, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text="Media Folder:").grid(row=row, column=0, sticky=tk.W, pady=5)
         folder_entry = ttk.Entry(main_frame, textvariable=self.folder_path, width=50)
         folder_entry.grid(row=row, column=1, sticky=(tk.W, tk.E), padx=5)
         ttk.Button(main_frame, text="Browse...", command=self.browse_folder).grid(
@@ -527,6 +641,19 @@ class ImageSorterGUI:
             orient=tk.HORIZONTAL, variable=self.brightness_weight
         ).grid(row=4, column=1, sticky=(tk.W, tk.E))
 
+        videos_frame = ttk.LabelFrame(main_frame, text="Videos", padding="10")
+        videos_frame.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
+        videos_frame.columnconfigure(1, weight=1)
+        row += 1
+
+        ttk.Label(videos_frame, text="Frame position (%):").grid(
+            row=0, column=0, sticky=tk.W
+        )
+        tk.Scale(
+            videos_frame, from_=0, to=100, resolution=1,
+            orient=tk.HORIZONTAL, variable=self.video_frame_percentage
+        ).grid(row=0, column=1, sticky=(tk.W, tk.E))
+
         button_frame = ttk.Frame(main_frame)
         button_frame.grid(row=row, column=0, columnspan=3, pady=15)
         row += 1
@@ -569,16 +696,23 @@ class ImageSorterGUI:
 
         sys.stdout = TextRedirector(self.log_text, "stdout")
 
-        self.log("Ready. Select a folder containing images to sort.")
-        self.log(f"Supported formats: {', '.join(sorted(IMAGE_EXTENSIONS))}")
+        self.log("Ready. Select a folder containing images or videos to sort.")
+        self.log(f"Supported image formats: {', '.join(sorted(IMAGE_EXTENSIONS))}")
+        self.log(f"Supported video formats: {', '.join(sorted(VIDEO_EXTENSIONS))}")
 
     def browse_folder(self):
-        folder = filedialog.askdirectory(title="Select Image Folder")
+        folder = filedialog.askdirectory(title="Select Media Folder")
         if folder:
             self.folder_path.set(folder)
             try:
                 image_files = get_image_files(folder)
-                self.log(f"\nFound {len(image_files)} images in {folder}")
+                video_files = [
+                    file_path for file_path in Path(folder).iterdir()
+                    if file_path.is_file() and file_path.suffix.lower() in VIDEO_EXTENSIONS
+                ]
+                self.log(
+                    f"\nFound {len(image_files)} images and {len(video_files)} videos in {folder}"
+                )
             except Exception as e:  # noqa: BLE001
                 self.log(f"\nError: {e}")
 
@@ -595,6 +729,9 @@ class ImageSorterGUI:
             self.spatial_weight.get(),
             self.texture_weight.get(),
             self.brightness_weight.get(),
+            self.video_frame_percentage.get(),
+            self.dry_run.get(),
+            self.backup.get(),
         )
         self.log("Settings saved.")
 
@@ -607,6 +744,9 @@ class ImageSorterGUI:
         self.spatial_weight.set(spatial_weight)
         self.texture_weight.set(texture_weight)
         self.brightness_weight.set(brightness_weight)
+        self.video_frame_percentage.set(VIDEO_FRAME_PERCENTAGE)
+        self.dry_run.set(DRY_RUN)
+        self.backup.set(BACKUP)
         self.log("Feature weights reset to defaults.")
 
     def log(self, message):
@@ -647,7 +787,7 @@ class ImageSorterGUI:
         if not self.dry_run.get():
             response = messagebox.askyesno(
                 "Confirm Rename",
-                "This will rename all images in the folder.\n"
+                "This will rename all supported media files in the folder.\n"
                 f"{'A backup will be created.' if self.backup.get() else 'NO BACKUP will be created!'}\n\n"
                 "Continue?"
             )
@@ -661,10 +801,11 @@ class ImageSorterGUI:
 
         self.log_text.delete(1.0, tk.END)
         self.log("="*60)
-        self.log(r"Starting image sorting...")
+        self.log(r"Starting media sorting...")
         self.log(f"Folder: {folder}")
         self.log(f"Threshold: {threshold_val if threshold_val else 'auto'}")
         self.log(f"Feature weights: {feature_weights}")
+        self.log(f"Video frame position: {self.video_frame_percentage.get()}%")
         self.log(f"Prefix: '{self.prefix.get()}'")
         self.log(f"Dry Run: {self.dry_run.get()}")
         self.log(f"Backup: {self.backup.get()}")
@@ -672,14 +813,29 @@ class ImageSorterGUI:
 
         thread = threading.Thread(
             target=self.run_sorting,
-            args=(folder, threshold_val, feature_weights),
+            args=(
+                folder,
+                threshold_val,
+                feature_weights,
+                self.video_frame_percentage.get(),
+            ),
             daemon=True
         )
         thread.start()
 
-    def run_sorting(self, folder, threshold_val, feature_weights):
+    def run_sorting(
+        self,
+        folder,
+        threshold_val,
+        feature_weights,
+        video_frame_percentage,
+    ):
         try:
-            image_files = get_image_files(folder)
+            image_files = get_video_image_files(folder, video_frame_percentage)
+            processing_videos = bool(image_files)
+
+            if not processing_videos:
+                image_files = get_image_files(folder)
 
             if not image_files:
                 self.log("\nError: No image files found!")
@@ -692,12 +848,28 @@ class ImageSorterGUI:
                 feature_weights,
             )
 
-            rename_images(
-                sorted_images,
-                prefix=self.prefix.get(),
-                dry_run=self.dry_run.get(),
-                backup=self.backup.get()
-            )
+            if processing_videos:
+                rename_images(
+                    sorted_images,
+                    prefix=self.prefix.get(),
+                    dry_run=self.dry_run.get(),
+                    backup=False,
+                )
+                rename_videos(
+                    sorted_images,
+                    folder,
+                    prefix=self.prefix.get(),
+                    dry_run=self.dry_run.get(),
+                    backup=self.backup.get(),
+                )
+                cleanup_video_grabs(folder)
+            else:
+                rename_images(
+                    sorted_images,
+                    prefix=self.prefix.get(),
+                    dry_run=self.dry_run.get(),
+                    backup=self.backup.get()
+                )
 
             self.on_complete(True)
 
@@ -724,7 +896,7 @@ class ImageSorterGUI:
                                   "Uncheck 'Dry Run' to actually rename files.")
             else:
                 messagebox.showinfo("Success",
-                                  "Images sorted and renamed successfully!\n"
+                                  "Media sorted and renamed successfully!\n"
                                   "Check the log for details.")
 
     def stop_sorting(self):
