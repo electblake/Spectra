@@ -225,13 +225,19 @@ def get_video_image_files(
         frame_count = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
         frame_number = round((frame_count - 1) * frame_percentage / 100)
         video.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
-        _, frame = video.read()
+        frame_read, frame = video.read()
         video.release()
 
-        image_file_path = video_grabs_folder / f"{video_file_path.name}.png"
-        image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        image.save(image_file_path)
-        image_files.append(image_file_path)
+        if not frame_read or frame is None or frame.size == 0:
+            print(
+                f"  Warning: Skipping {video_file_path.name}: "
+                f"could not read frame {frame_number}"
+            )
+        else:
+            image_file_path = video_grabs_folder / f"{video_file_path.name}.png"
+            image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            image.save(image_file_path)
+            image_files.append(image_file_path)
 
         if i % 10 == 0 or i == len(video_files):
             print(f"  Extracted {i}/{len(video_files)}")
