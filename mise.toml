@@ -1,0 +1,9 @@
+[tools]
+powershell = "7"
+python = "3.12"
+uv = "latest"
+
+[tasks.build]
+description = "Compile Spectra as a standalone executable"
+run = "uv run --isolated pyinstaller --noconfirm --clean Spectra.spec"
+env = { PYTHONPATH = "" }
