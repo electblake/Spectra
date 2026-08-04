@@ -13,7 +13,7 @@ artifact_name = (
 )
 
 a = Analysis(
-    ["Spectra.py"],
+    ["app/__main__.py"],
     pathex=[],
     binaries=[],
     datas=[],

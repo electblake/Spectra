@@ -7,3 +7,8 @@ uv = "latest"
 description = "Compile Spectra as a standalone executable"
 run = "uv run --isolated pyinstaller --noconfirm --clean Spectra.spec"
 env = { PYTHONPATH = "" }
+
+[tasks.run]
+description = "Run Spectra from source"
+run = "uv run python -m app"
+env = { PYTHONPATH = "" }

@@ -51,7 +51,7 @@ Python 3.8 or higher
 
 3. **Run Spectra**
    ```
-   python Spectra.py
+   python -m app
    ```
 
 ### Dependencies
@@ -113,7 +113,7 @@ Uses DBSCAN (Density-Based Spatial Clustering) to:
 
 1. **Launch the application**
    ```bash
-   python Spectra.py
+   python -m app
    ```
 
 2. **Select your image folder**
@@ -147,7 +147,7 @@ sorted_images = sort_with_tight_clustering(
 #### Programmatic usage
 
 ```python
-from Spectra import get_image_files, sort_with_tight_clustering, rename_images
+from app.main import get_image_files, sort_with_tight_clustering, rename_images
 
 # Load images
 images = get_image_files("/path/to/images")
@@ -233,7 +233,7 @@ pip install pyinstaller
 #### Windows
 
 ```bash
-pyinstaller --onefile --windowed --name Spectra --icon=icon.ico Spectra.py
+pyinstaller --onefile --windowed --name Spectra --icon=icon.ico app/__main__.py
 ```
 
 The executable will be in `dist/Spectra.exe`
@@ -241,7 +241,7 @@ The executable will be in `dist/Spectra.exe`
 #### macOS
 
 ```bash
-pyinstaller --onefile --windowed --name Spectra --icon=icon.icns Spectra.py
+pyinstaller --onefile --windowed --name Spectra --icon=icon.icns app/__main__.py
 ```
 
 The app bundle will be in `dist/Spectra.app`
@@ -249,7 +249,7 @@ The app bundle will be in `dist/Spectra.app`
 #### Linux
 
 ```bash
-pyinstaller --onefile --name Spectra Spectra.py
+pyinstaller --onefile --name Spectra app/__main__.py
 ```
 
 The executable will be in `dist/Spectra`
@@ -265,7 +265,7 @@ pyinstaller --onefile \
             --strip \
             --exclude-module matplotlib \
             --exclude-module pytest \
-            Spectra.py
+            app/__main__.py
 ```
 
 **Build options explained:**
@@ -281,13 +281,13 @@ pyinstaller --onefile \
 **"Failed to execute script" error:**
 ```bash
 # Build without --windowed to see error messages
-pyinstaller --onefile --name Spectra Spectra.py
+pyinstaller --onefile --name Spectra app/__main__.py
 ```
 
 **Missing modules in compiled version:**
 ```bash
 # Add hidden imports
-pyinstaller --onefile --hidden-import=PIL._tkinter_finder Spectra.py
+pyinstaller --onefile --hidden-import=PIL._tkinter_finder app/__main__.py
 ```
 
 **Antivirus false positives:**

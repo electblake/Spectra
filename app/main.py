@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+"""Spectra application."""
 
 import shutil
 import sys
@@ -11,6 +11,8 @@ import numpy as np
 from PIL import Image
 from scipy.spatial.distance import cdist
 from sklearn.cluster import DBSCAN
+
+from app.config import DEFAULT_FEATURE_WEIGHTS, read_user_settings, save_user_settings
 
 IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp'}
 
@@ -114,7 +116,12 @@ def extract_brightness_contrast(img: Image.Image) -> np.ndarray:
     return np.array(features)
 
 
-def calculate_visual_features(image_path: str) -> np.ndarray:
+def calculate_visual_features(
+    image_path: str,
+    feature_weights: tuple[float, float, float, float, float] = DEFAULT_FEATURE_WEIGHTS,
+) -> np.ndarray:
+    rgb_weight, hsv_weight, spatial_weight, texture_weight, brightness_weight = feature_weights
+
     try:
         img = Image.open(image_path)
 
@@ -125,11 +132,11 @@ def calculate_visual_features(image_path: str) -> np.ndarray:
         brightness = extract_brightness_contrast(img)
 
         features = np.concatenate([
-            rgb_hist * 2.0,
-            hsv_hist * 1.5,
-            spatial_color * 1.0,
-            texture * 0.5,
-            brightness * 0.8,
+            rgb_hist * rgb_weight,
+            hsv_hist * hsv_weight,
+            spatial_color * spatial_weight,
+            texture * texture_weight,
+            brightness * brightness_weight,
         ])
 
         norm = np.linalg.norm(features)
@@ -190,7 +197,11 @@ def sort_cluster_internally(cluster_features: np.ndarray, cluster_items: list) -
     return [cluster_items[i] for i in path]
 
 
-def sort_with_tight_clustering(image_files: list[Path], similarity_threshold: float|None = None) -> list[tuple[Path, np.ndarray]]:
+def sort_with_tight_clustering(
+    image_files: list[Path],
+    similarity_threshold: float | None = None,
+    feature_weights: tuple[float, float, float, float, float] = DEFAULT_FEATURE_WEIGHTS,
+) -> list[tuple[Path, np.ndarray]]:
     print(f"Loading {len(image_files)} images and extracting visual features...")
     print("(This includes color histograms, spatial layout, texture, and brightness)\n")
 
@@ -199,7 +210,7 @@ def sort_with_tight_clustering(image_files: list[Path], similarity_threshold: fl
 
     for i, img_path in enumerate(image_files, 1):
         try:
-            feat = calculate_visual_features(str(img_path))
+            feat = calculate_visual_features(str(img_path), feature_weights)
             images_with_features.append((img_path, feat))
             features.append(feat)
             if i % 10 == 0 or i == len(image_files):
@@ -385,13 +396,20 @@ class ImageSorterGUI:
     def __init__(self, root):
         self.root = root
         self.root.title(f"{__name__} v{__version__} - {__desc__}")
-        self.root.geometry("700x600")
+        self.root.geometry("700x800")
         self.root.resizable(True, True)
+
+        user_settings = read_user_settings()
 
         self.folder_path = tk.StringVar()
         self.prefix = tk.StringVar(value="")
         self.threshold = tk.StringVar(value="0.01")
         self.auto_threshold = tk.BooleanVar(value=False)
+        self.rgb_weight = tk.DoubleVar(value=user_settings["rgb_weight"])
+        self.hsv_weight = tk.DoubleVar(value=user_settings["hsv_weight"])
+        self.spatial_weight = tk.DoubleVar(value=user_settings["spatial_weight"])
+        self.texture_weight = tk.DoubleVar(value=user_settings["texture_weight"])
+        self.brightness_weight = tk.DoubleVar(value=user_settings["brightness_weight"])
         self.dry_run = tk.BooleanVar(value=True)
         self.backup = tk.BooleanVar(value=True)
         self.is_processing = False
@@ -474,6 +492,41 @@ class ImageSorterGUI:
             row=settings_row, column=0, columnspan=3, sticky=tk.W, pady=5
         )
 
+        weights_frame = ttk.LabelFrame(main_frame, text="Feature Weights", padding="10")
+        weights_frame.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
+        weights_frame.columnconfigure(1, weight=1)
+        row += 1
+
+        ttk.Label(weights_frame, text="RGB histogram:").grid(row=0, column=0, sticky=tk.W)
+        tk.Scale(
+            weights_frame, from_=0.0, to=3.0, resolution=0.1,
+            orient=tk.HORIZONTAL, variable=self.rgb_weight
+        ).grid(row=0, column=1, sticky=(tk.W, tk.E))
+
+        ttk.Label(weights_frame, text="HSV histogram:").grid(row=1, column=0, sticky=tk.W)
+        tk.Scale(
+            weights_frame, from_=0.0, to=3.0, resolution=0.1,
+            orient=tk.HORIZONTAL, variable=self.hsv_weight
+        ).grid(row=1, column=1, sticky=(tk.W, tk.E))
+
+        ttk.Label(weights_frame, text="Spatial color:").grid(row=2, column=0, sticky=tk.W)
+        tk.Scale(
+            weights_frame, from_=0.0, to=3.0, resolution=0.1,
+            orient=tk.HORIZONTAL, variable=self.spatial_weight
+        ).grid(row=2, column=1, sticky=(tk.W, tk.E))
+
+        ttk.Label(weights_frame, text="Texture:").grid(row=3, column=0, sticky=tk.W)
+        tk.Scale(
+            weights_frame, from_=0.0, to=3.0, resolution=0.1,
+            orient=tk.HORIZONTAL, variable=self.texture_weight
+        ).grid(row=3, column=1, sticky=(tk.W, tk.E))
+
+        ttk.Label(weights_frame, text="Brightness and contrast:").grid(row=4, column=0, sticky=tk.W)
+        tk.Scale(
+            weights_frame, from_=0.0, to=3.0, resolution=0.1,
+            orient=tk.HORIZONTAL, variable=self.brightness_weight
+        ).grid(row=4, column=1, sticky=(tk.W, tk.E))
+
         button_frame = ttk.Frame(main_frame)
         button_frame.grid(row=row, column=0, columnspan=3, pady=15)
         row += 1
@@ -486,6 +539,20 @@ class ImageSorterGUI:
                                       command=self.stop_sorting,
                                       state=tk.DISABLED)
         self.stop_button.pack(side=tk.LEFT, padx=5)
+
+        self.save_settings_button = ttk.Button(
+            button_frame,
+            text="Save Settings",
+            command=self.save_settings,
+        )
+        self.save_settings_button.pack(side=tk.LEFT, padx=5)
+
+        self.defaults_button = ttk.Button(
+            button_frame,
+            text="Defaults",
+            command=self.restore_default_settings,
+        )
+        self.defaults_button.pack(side=tk.LEFT, padx=5)
 
         self.progress = ttk.Progressbar(main_frame, mode='indeterminate')
         self.progress.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
@@ -521,6 +588,27 @@ class ImageSorterGUI:
         else:
             self.threshold.set("0.01")
 
+    def save_settings(self):
+        save_user_settings(
+            self.rgb_weight.get(),
+            self.hsv_weight.get(),
+            self.spatial_weight.get(),
+            self.texture_weight.get(),
+            self.brightness_weight.get(),
+        )
+        self.log("Settings saved.")
+
+    def restore_default_settings(self):
+        rgb_weight, hsv_weight, spatial_weight, texture_weight, brightness_weight = (
+            DEFAULT_FEATURE_WEIGHTS
+        )
+        self.rgb_weight.set(rgb_weight)
+        self.hsv_weight.set(hsv_weight)
+        self.spatial_weight.set(spatial_weight)
+        self.texture_weight.set(texture_weight)
+        self.brightness_weight.set(brightness_weight)
+        self.log("Feature weights reset to defaults.")
+
     def log(self, message):
         self.log_text.insert(tk.END, message + "\n")
         self.log_text.see(tk.END)
@@ -548,6 +636,14 @@ class ImageSorterGUI:
                                    "Threshold must be a positive number.")
                 return
 
+        feature_weights = (
+            self.rgb_weight.get(),
+            self.hsv_weight.get(),
+            self.spatial_weight.get(),
+            self.texture_weight.get(),
+            self.brightness_weight.get(),
+        )
+
         if not self.dry_run.get():
             response = messagebox.askyesno(
                 "Confirm Rename",
@@ -568,6 +664,7 @@ class ImageSorterGUI:
         self.log(r"Starting image sorting...")
         self.log(f"Folder: {folder}")
         self.log(f"Threshold: {threshold_val if threshold_val else 'auto'}")
+        self.log(f"Feature weights: {feature_weights}")
         self.log(f"Prefix: '{self.prefix.get()}'")
         self.log(f"Dry Run: {self.dry_run.get()}")
         self.log(f"Backup: {self.backup.get()}")
@@ -575,12 +672,12 @@ class ImageSorterGUI:
 
         thread = threading.Thread(
             target=self.run_sorting,
-            args=(folder, threshold_val),
+            args=(folder, threshold_val, feature_weights),
             daemon=True
         )
         thread.start()
 
-    def run_sorting(self, folder, threshold_val):
+    def run_sorting(self, folder, threshold_val, feature_weights):
         try:
             image_files = get_image_files(folder)
 
@@ -589,7 +686,11 @@ class ImageSorterGUI:
                 self.on_complete(False)
                 return
 
-            sorted_images = sort_with_tight_clustering(image_files, threshold_val)
+            sorted_images = sort_with_tight_clustering(
+                image_files,
+                threshold_val,
+                feature_weights,
+            )
 
             rename_images(
                 sorted_images,
