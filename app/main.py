@@ -15,10 +15,12 @@ from scipy.spatial.distance import cdist
 from sklearn.cluster import DBSCAN
 
 from app.config import (
+    AUTO_DETERMINE,
     BACKUP,
     DEFAULT_FEATURE_WEIGHTS,
     DRY_RUN,
     IMAGE_EXTENSIONS,
+    SIMILARITY_THRESHOLD,
     VIDEO_EXTENSIONS,
     VIDEO_FRAME_PERCENTAGE,
     read_user_settings,
@@ -514,8 +516,8 @@ class ImageSorterGUI:
 
         self.folder_path = tk.StringVar()
         self.prefix = tk.StringVar(value="")
-        self.threshold = tk.StringVar(value="0.01")
-        self.auto_threshold = tk.BooleanVar(value=False)
+        self.threshold = tk.StringVar(value=str(user_settings["similarity_threshold"]))
+        self.auto_threshold = tk.BooleanVar(value=user_settings["auto_determine"])
         self.rgb_weight = tk.DoubleVar(value=user_settings["rgb_weight"])
         self.hsv_weight = tk.DoubleVar(value=user_settings["hsv_weight"])
         self.spatial_weight = tk.DoubleVar(value=user_settings["spatial_weight"])
@@ -583,10 +585,16 @@ class ImageSorterGUI:
         threshold_frame = ttk.Frame(settings_frame)
         threshold_frame.grid(row=settings_row, column=1, columnspan=2, sticky=tk.W, padx=5)
 
-        ttk.Entry(threshold_frame, textvariable=self.threshold, width=10).pack(side=tk.LEFT)
+        self.threshold_entry = ttk.Entry(
+            threshold_frame,
+            textvariable=self.threshold,
+            width=10,
+        )
+        self.threshold_entry.pack(side=tk.LEFT)
         ttk.Checkbutton(threshold_frame, text="Auto-determine",
                        variable=self.auto_threshold,
                        command=self.toggle_threshold).pack(side=tk.LEFT, padx=10)
+        self.toggle_threshold()
         settings_row += 1
 
         threshold_hint = ttk.Label(settings_frame,
@@ -718,9 +726,9 @@ class ImageSorterGUI:
 
     def toggle_threshold(self):
         if self.auto_threshold.get():
-            self.threshold.set("auto")
+            self.threshold_entry.state(["disabled"])
         else:
-            self.threshold.set("0.01")
+            self.threshold_entry.state(["!disabled"])
 
     def save_settings(self):
         save_user_settings(
@@ -732,6 +740,8 @@ class ImageSorterGUI:
             self.video_frame_percentage.get(),
             self.dry_run.get(),
             self.backup.get(),
+            float(self.threshold.get()),
+            self.auto_threshold.get(),
         )
         self.log("Settings saved.")
 
@@ -747,7 +757,10 @@ class ImageSorterGUI:
         self.video_frame_percentage.set(VIDEO_FRAME_PERCENTAGE)
         self.dry_run.set(DRY_RUN)
         self.backup.set(BACKUP)
-        self.log("Feature weights reset to defaults.")
+        self.threshold.set(str(SIMILARITY_THRESHOLD))
+        self.auto_threshold.set(AUTO_DETERMINE)
+        self.toggle_threshold()
+        self.log("Settings reset to defaults.")
 
     def log(self, message):
         self.log_text.insert(tk.END, message + "\n")

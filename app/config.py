@@ -10,6 +10,8 @@ BRIGHTNESS_WEIGHT = 0.8
 VIDEO_FRAME_PERCENTAGE = 50
 DRY_RUN = True
 BACKUP = True
+SIMILARITY_THRESHOLD = 0.01
+AUTO_DETERMINE = False
 
 DEFAULT_FEATURE_WEIGHTS = (RGB_WEIGHT, HSV_WEIGHT, SPATIAL_WEIGHT, TEXTURE_WEIGHT, BRIGHTNESS_WEIGHT)
 
@@ -32,6 +34,8 @@ def read_user_settings() -> dict:
             "video_frame_percentage": VIDEO_FRAME_PERCENTAGE,
             "dry_run": DRY_RUN,
             "backup": BACKUP,
+            "similarity_threshold": SIMILARITY_THRESHOLD,
+            "auto_determine": AUTO_DETERMINE,
         }
 
     settings = ConfigParser()
@@ -44,9 +48,23 @@ def read_user_settings() -> dict:
         "spatial_weight": settings.getfloat("feature_weights", "spatial_weight"),
         "texture_weight": settings.getfloat("feature_weights", "texture_weight"),
         "brightness_weight": settings.getfloat("feature_weights", "brightness_weight"),
-        "video_frame_percentage": settings.getint("videos", "frame_percentage"),
-        "dry_run": settings.getboolean("general", "dry_run"),
-        "backup": settings.getboolean("general", "backup"),
+        "video_frame_percentage": settings.getint(
+            "videos",
+            "frame_percentage",
+            fallback=VIDEO_FRAME_PERCENTAGE,
+        ),
+        "dry_run": settings.getboolean("general", "dry_run", fallback=DRY_RUN),
+        "backup": settings.getboolean("general", "backup", fallback=BACKUP),
+        "similarity_threshold": settings.getfloat(
+            "clustering",
+            "similarity_threshold",
+            fallback=SIMILARITY_THRESHOLD,
+        ),
+        "auto_determine": settings.getboolean(
+            "clustering",
+            "auto_determine",
+            fallback=AUTO_DETERMINE,
+        ),
     }
 
 
@@ -59,6 +77,8 @@ def save_user_settings(
     video_frame_percentage,
     dry_run,
     backup,
+    similarity_threshold,
+    auto_determine,
 ) -> None:
     settings_path = user_config_path(
         "Spectra",
@@ -77,6 +97,8 @@ def save_user_settings(
         settings.add_section("videos")
     if not settings.has_section("general"):
         settings.add_section("general")
+    if not settings.has_section("clustering"):
+        settings.add_section("clustering")
 
     settings.set("feature_weights", "rgb_weight", str(rgb_weight))
     settings.set("feature_weights", "hsv_weight", str(hsv_weight))
@@ -86,6 +108,8 @@ def save_user_settings(
     settings.set("videos", "frame_percentage", str(video_frame_percentage))
     settings.set("general", "dry_run", str(dry_run))
     settings.set("general", "backup", str(backup))
+    settings.set("clustering", "similarity_threshold", str(similarity_threshold))
+    settings.set("clustering", "auto_determine", str(auto_determine))
 
     with settings_path.open("w", encoding="utf-8") as settings_file:
         settings.write(settings_file)
