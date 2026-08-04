@@ -1,5 +1,6 @@
 """Spectra application."""
 
+import re
 import shutil
 import sys
 import threading
@@ -17,9 +18,14 @@ from sklearn.cluster import DBSCAN
 from app.config import (
     AUTO_DETERMINE,
     BACKUP,
+    COUNT_START,
+    DATE_PATTERN,
     DEFAULT_FEATURE_WEIGHTS,
     DRY_RUN,
     IMAGE_EXTENSIONS,
+    INCLUDE_VIDEOS,
+    PARSE_DATES,
+    SEPARATOR,
     SIMILARITY_THRESHOLD,
     VIDEO_EXTENSIONS,
     VIDEO_FRAME_PERCENTAGE,
@@ -185,6 +191,7 @@ def get_image_files(folder_path: str) -> list[Path]:
 
 def get_video_image_files(
     folder_path: str | Path,
+    stop_event: threading.Event,
     frame_percentage: int = VIDEO_FRAME_PERCENTAGE,
 ) -> list[Path]:
     folder_path = Path(folder_path)
@@ -203,10 +210,17 @@ def get_video_image_files(
         return []
 
     video_grabs_folder = folder_path / VIDEO_GRABS_FOLDER
-    video_grabs_folder.mkdir()
+    video_grabs_folder.mkdir(exist_ok=True)
+
+    print(f"Extracting frames from {len(video_files)} videos...")
 
     image_files = []
-    for video_file_path in video_files:
+    for i, video_file_path in enumerate(video_files, 1):
+        if stop_event.is_set():
+            cleanup_video_grabs(folder_path)
+            print("Frame extraction stopped.")
+            return []
+
         video = cv2.VideoCapture(str(video_file_path))
         frame_count = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
         frame_number = round((frame_count - 1) * frame_percentage / 100)
@@ -218,6 +232,9 @@ def get_video_image_files(
         image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         image.save(image_file_path)
         image_files.append(image_file_path)
+
+        if i % 10 == 0 or i == len(video_files):
+            print(f"  Extracted {i}/{len(video_files)}")
 
     return sorted(image_files)
 
@@ -288,9 +305,10 @@ def sort_with_tight_clustering(
     if similarity_threshold is None:
         nn_distances = []
         for i in range(n_images):
-            distances = [distance_matrix[i, j] for j in range(n_images) if i != j]
-            nn_distances.append(min(distances))
-        similarity_threshold = np.percentile(nn_distances, 70)
+            positive_distances = distance_matrix[i][distance_matrix[i] > 0]
+            if positive_distances.size:
+                nn_distances.append(np.min(positive_distances))
+        similarity_threshold = float(np.percentile(nn_distances, 70))
 
     print(f"\nClustering with DBSCAN (eps={similarity_threshold:.4f})...")
 
@@ -388,7 +406,11 @@ def sort_with_tight_clustering(
 def rename_images(sorted_images: list[tuple[Path, np.ndarray]],
                   prefix: str = "",
                   dry_run: bool = False,
-                  backup: bool = True) -> None:
+                  backup: bool = True,
+                  parse_dates: bool = False,
+                  date_pattern: str = DATE_PATTERN,
+                  separator: str = SEPARATOR,
+                  count_start: int = COUNT_START) -> None:
     folder = sorted_images[0][0].parent
 
     backup_folder = folder / "backup_originals"
@@ -396,7 +418,7 @@ def rename_images(sorted_images: list[tuple[Path, np.ndarray]],
         backup_folder.mkdir(exist_ok=True)
         print(f"\nCreating backup in: {backup_folder}")
 
-    padding = len(str(len(sorted_images)))
+    padding = len(str(count_start + len(sorted_images) - 1))
 
     mapping = []
     temp_names = []
@@ -416,15 +438,25 @@ def rename_images(sorted_images: list[tuple[Path, np.ndarray]],
         mapping.append((img_path.name, temp_name.name))
 
     final_mapping = []
+    printed_parsed_date = False
     for i, temp_path in enumerate(temp_names, 1):
         ext = temp_path.suffix
-        new_name = f"{prefix}{i:0{padding}d}{ext}"
+        original_name = mapping[i-1][0]
+        date_match = re.search(date_pattern, original_name) if parse_dates else None
+        date = date_match.group() if date_match else ""
+        if date and not printed_parsed_date:
+            print(f"Parsed date: {date}")
+            printed_parsed_date = True
+        count = count_start + i - 1
+        if date:
+            new_name = f"{prefix}{count:0{padding}d}{separator}{date}{ext}"
+        else:
+            new_name = f"{prefix}{count:0{padding}d}{ext}"
         final_path = folder / new_name
 
         if not dry_run:
             temp_path.rename(final_path)
 
-        original_name = mapping[i-1][0]
         final_mapping.append((original_name, new_name))
 
         if i <= 5 or i > len(temp_names) - 5:
@@ -451,7 +483,11 @@ def rename_videos(sorted_images: list[tuple[Path, np.ndarray]],
                   folder_path: str | Path,
                   prefix: str = "",
                   dry_run: bool = False,
-                  backup: bool = True) -> None:
+                  backup: bool = True,
+                  parse_dates: bool = False,
+                  date_pattern: str = DATE_PATTERN,
+                  separator: str = SEPARATOR,
+                  count_start: int = COUNT_START) -> None:
     folder = Path(folder_path)
     video_files = [folder / image_path.stem for image_path, _ in sorted_images]
 
@@ -460,7 +496,7 @@ def rename_videos(sorted_images: list[tuple[Path, np.ndarray]],
         backup_folder.mkdir(exist_ok=True)
         print(f"\nCreating backup in: {backup_folder}")
 
-    padding = len(str(len(video_files)))
+    padding = len(str(count_start + len(video_files) - 1))
     temp_names = []
 
     print(f"\n{'DRY RUN - ' if dry_run else ''}Renaming videos...")
@@ -477,7 +513,15 @@ def rename_videos(sorted_images: list[tuple[Path, np.ndarray]],
 
     final_mapping = []
     for i, (video_path, temp_path) in enumerate(zip(video_files, temp_names), 1):
-        new_name = f"{prefix}{i:0{padding}d}{video_path.suffix}"
+        date_match = re.search(date_pattern, video_path.name) if parse_dates else None
+        date = date_match.group() if date_match else ""
+        count = count_start + i - 1
+        if date:
+            new_name = (
+                f"{prefix}{count:0{padding}d}{separator}{date}{video_path.suffix}"
+            )
+        else:
+            new_name = f"{prefix}{count:0{padding}d}{video_path.suffix}"
         final_path = folder / new_name
 
         if not dry_run:
@@ -509,7 +553,7 @@ class ImageSorterGUI:
     def __init__(self, root):
         self.root = root
         self.root.title(f"{__name__} v{__version__} - {__desc__}")
-        self.root.geometry("700x900")
+        self.root.geometry("960x960")
         self.root.resizable(True, True)
 
         user_settings = read_user_settings()
@@ -528,16 +572,40 @@ class ImageSorterGUI:
         )
         self.dry_run = tk.BooleanVar(value=user_settings["dry_run"])
         self.backup = tk.BooleanVar(value=user_settings["backup"])
+        self.include_videos = tk.BooleanVar(value=user_settings["include_videos"])
+        self.parse_dates = tk.BooleanVar(value=user_settings["parse_dates"])
+        self.date_pattern = tk.StringVar(value=user_settings["date_pattern"])
+        self.separator = tk.StringVar(value=user_settings["separator"])
+        self.count_start = tk.IntVar(value=user_settings["count_start"])
         self.is_processing = False
+        self.stop_event = threading.Event()
 
         self.setup_ui()
 
     def setup_ui(self):
-        main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
+
+        self.main_canvas = tk.Canvas(self.root, highlightthickness=0)
+        self.main_canvas.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        self.main_scrollbar = ttk.Scrollbar(
+            self.root,
+            orient=tk.VERTICAL,
+            command=self.main_canvas.yview,
+        )
+        self.main_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        self.main_canvas.configure(yscrollcommand=self.main_scrollbar.set)
+
+        main_frame = ttk.Frame(self.main_canvas, padding="10")
+        self.main_frame = main_frame
+        self.main_canvas_window = self.main_canvas.create_window(
+            (0, 0),
+            window=main_frame,
+            anchor=tk.NW,
+        )
+        main_frame.bind("<Configure>", self.configure_main_scroll)
+        self.main_canvas.bind("<Configure>", self.resize_main_content)
         main_frame.columnconfigure(1, weight=1)
 
         row = 0
@@ -560,30 +628,17 @@ class ImageSorterGUI:
         )
         row += 1
 
-        settings_frame = ttk.LabelFrame(main_frame, text="Settings", padding="10")
-        settings_frame.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
-        settings_frame.columnconfigure(1, weight=1)
+        clusters_frame = ttk.LabelFrame(main_frame, text="Clusters", padding="10")
+        clusters_frame.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
+        clusters_frame.columnconfigure(1, weight=1)
         row += 1
 
-        settings_row = 0
-
-        ttk.Label(settings_frame, text="File Prefix:").grid(
-            row=settings_row, column=0, sticky=tk.W, pady=5
-        )
-        ttk.Entry(settings_frame, textvariable=self.prefix, width=20).grid(
-            row=settings_row, column=1, sticky=tk.W, padx=5
-        )
-        ttk.Label(settings_frame, text="(e.g., 'sorted_' → sorted_001.jpg)").grid(
-            row=settings_row, column=2, sticky=tk.W
-        )
-        settings_row += 1
-
-        ttk.Label(settings_frame, text="Similarity Threshold:").grid(
-            row=settings_row, column=0, sticky=tk.W, pady=5
+        ttk.Label(clusters_frame, text="Similarity Threshold:").grid(
+            row=0, column=0, sticky=tk.W, pady=5
         )
 
-        threshold_frame = ttk.Frame(settings_frame)
-        threshold_frame.grid(row=settings_row, column=1, columnspan=2, sticky=tk.W, padx=5)
+        threshold_frame = ttk.Frame(clusters_frame)
+        threshold_frame.grid(row=0, column=1, columnspan=2, sticky=tk.W, padx=5)
 
         self.threshold_entry = ttk.Entry(
             threshold_frame,
@@ -595,24 +650,82 @@ class ImageSorterGUI:
                        variable=self.auto_threshold,
                        command=self.toggle_threshold).pack(side=tk.LEFT, padx=10)
         self.toggle_threshold()
-        settings_row += 1
 
-        threshold_hint = ttk.Label(settings_frame,
+        threshold_hint = ttk.Label(clusters_frame,
                                    text="Lower = tighter clusters (0.005-0.05 typical, 0.01 recommended)",
                                    font=('Arial', 8))
-        threshold_hint.grid(row=settings_row, column=1, columnspan=2, sticky=tk.W, padx=5)
-        settings_row += 1
+        threshold_hint.grid(row=1, column=1, columnspan=2, sticky=tk.W, padx=5)
 
-        ttk.Checkbutton(settings_frame, text="Dry Run (preview only, don't rename)",
-                       variable=self.dry_run).grid(
-            row=settings_row, column=0, columnspan=3, sticky=tk.W, pady=5
+        renaming_frame = ttk.LabelFrame(main_frame, text="Renaming", padding="10")
+        renaming_frame.grid(
+            row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5
         )
-        settings_row += 1
+        renaming_frame.columnconfigure(1, weight=1)
+        row += 1
 
-        ttk.Checkbutton(settings_frame, text="Create backup of original files",
-                       variable=self.backup).grid(
-            row=settings_row, column=0, columnspan=3, sticky=tk.W, pady=5
+        renaming_row = 0
+
+        ttk.Label(renaming_frame, text="File Prefix:").grid(
+            row=renaming_row, column=0, sticky=tk.W, pady=5
         )
+        ttk.Entry(renaming_frame, textvariable=self.prefix, width=40).grid(
+            row=renaming_row, column=1, sticky=tk.W, padx=5
+        )
+        ttk.Label(renaming_frame, text="(e.g., 'sorted_' → sorted_001.jpg)").grid(
+            row=renaming_row, column=2, sticky=tk.W
+        )
+        renaming_row += 1
+
+        ttk.Label(renaming_frame, text="Count start:").grid(
+            row=renaming_row, column=0, sticky=tk.W, pady=5
+        )
+        ttk.Entry(
+            renaming_frame,
+            textvariable=self.count_start,
+            width=10,
+        ).grid(row=renaming_row, column=1, sticky=tk.W, padx=5)
+        ttk.Label(renaming_frame, text="(e.g., 200 → sorted_200.jpg)").grid(
+            row=renaming_row, column=2, sticky=tk.W
+        )
+        renaming_row += 1
+
+        ttk.Checkbutton(
+            renaming_frame,
+            text="Parse dates",
+            variable=self.parse_dates,
+            command=self.toggle_date_pattern,
+        ).grid(row=renaming_row, column=0, columnspan=3, sticky=tk.W, pady=5)
+        renaming_row += 1
+
+        ttk.Label(renaming_frame, text="Date pattern:").grid(
+            row=renaming_row, column=0, sticky=tk.W, pady=5
+        )
+        self.date_pattern_entry = ttk.Entry(
+            renaming_frame,
+            textvariable=self.date_pattern,
+            width=40,
+        )
+        self.date_pattern_entry.grid(
+            row=renaming_row,
+            column=1,
+            sticky=tk.W,
+            padx=5,
+        )
+        ttk.Label(
+            renaming_frame,
+            text="(e.g., matches 2025-01-31 or 2025.01.31)",
+        ).grid(row=renaming_row, column=2, sticky=tk.W)
+        self.toggle_date_pattern()
+        renaming_row += 1
+
+        ttk.Label(renaming_frame, text="Separator:").grid(
+            row=renaming_row, column=0, sticky=tk.W, pady=5
+        )
+        ttk.Entry(
+            renaming_frame,
+            textvariable=self.separator,
+            width=10,
+        ).grid(row=renaming_row, column=1, sticky=tk.W, padx=5)
 
         weights_frame = ttk.LabelFrame(main_frame, text="Feature Weights", padding="10")
         weights_frame.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
@@ -654,13 +767,37 @@ class ImageSorterGUI:
         videos_frame.columnconfigure(1, weight=1)
         row += 1
 
+        ttk.Checkbutton(
+            videos_frame,
+            text="Include videos",
+            variable=self.include_videos,
+            command=self.toggle_video_settings,
+        ).grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
+
         ttk.Label(videos_frame, text="Frame position (%):").grid(
-            row=0, column=0, sticky=tk.W
+            row=1, column=0, sticky=tk.W
         )
-        tk.Scale(
+        self.video_frame_scale = tk.Scale(
             videos_frame, from_=0, to=100, resolution=1,
             orient=tk.HORIZONTAL, variable=self.video_frame_percentage
-        ).grid(row=0, column=1, sticky=(tk.W, tk.E))
+        )
+        self.video_frame_scale.grid(row=1, column=1, sticky=(tk.W, tk.E))
+        self.toggle_video_settings()
+
+        options_frame = ttk.Frame(main_frame)
+        options_frame.grid(row=row, column=0, columnspan=3, sticky=tk.W, pady=5)
+        row += 1
+
+        ttk.Checkbutton(
+            options_frame,
+            text="Dry Run (preview only, don't rename)",
+            variable=self.dry_run,
+        ).pack(side=tk.LEFT, padx=(0, 15))
+        ttk.Checkbutton(
+            options_frame,
+            text="Create backup of original files",
+            variable=self.backup,
+        ).pack(side=tk.LEFT)
 
         button_frame = ttk.Frame(main_frame)
         button_frame.grid(row=row, column=0, columnspan=3, pady=15)
@@ -708,16 +845,32 @@ class ImageSorterGUI:
         self.log(f"Supported image formats: {', '.join(sorted(IMAGE_EXTENSIONS))}")
         self.log(f"Supported video formats: {', '.join(sorted(VIDEO_EXTENSIONS))}")
 
+    def configure_main_scroll(self, _event=None):
+        self.main_canvas.configure(scrollregion=self.main_canvas.bbox("all"))
+        if self.main_frame.winfo_reqheight() > self.main_canvas.winfo_height():
+            self.main_scrollbar.grid()
+        else:
+            self.main_scrollbar.grid_remove()
+
+    def resize_main_content(self, event):
+        self.main_canvas.itemconfigure(self.main_canvas_window, width=event.width)
+        self.root.after_idle(self.configure_main_scroll)
+
     def browse_folder(self):
         folder = filedialog.askdirectory(title="Select Media Folder")
         if folder:
             self.folder_path.set(folder)
             try:
                 image_files = get_image_files(folder)
-                video_files = [
-                    file_path for file_path in Path(folder).iterdir()
-                    if file_path.is_file() and file_path.suffix.lower() in VIDEO_EXTENSIONS
-                ]
+                video_files = (
+                    [
+                        file_path for file_path in Path(folder).iterdir()
+                        if file_path.is_file()
+                        and file_path.suffix.lower() in VIDEO_EXTENSIONS
+                    ]
+                    if self.include_videos.get()
+                    else []
+                )
                 self.log(
                     f"\nFound {len(image_files)} images and {len(video_files)} videos in {folder}"
                 )
@@ -729,6 +882,18 @@ class ImageSorterGUI:
             self.threshold_entry.state(["disabled"])
         else:
             self.threshold_entry.state(["!disabled"])
+
+    def toggle_date_pattern(self):
+        if self.parse_dates.get():
+            self.date_pattern_entry.state(["!disabled"])
+        else:
+            self.date_pattern_entry.state(["disabled"])
+
+    def toggle_video_settings(self):
+        if self.include_videos.get():
+            self.video_frame_scale.config(state=tk.NORMAL)
+        else:
+            self.video_frame_scale.config(state=tk.DISABLED)
 
     def save_settings(self):
         save_user_settings(
@@ -742,6 +907,11 @@ class ImageSorterGUI:
             self.backup.get(),
             float(self.threshold.get()),
             self.auto_threshold.get(),
+            self.include_videos.get(),
+            self.parse_dates.get(),
+            self.date_pattern.get(),
+            self.separator.get(),
+            self.count_start.get(),
         )
         self.log("Settings saved.")
 
@@ -759,7 +929,14 @@ class ImageSorterGUI:
         self.backup.set(BACKUP)
         self.threshold.set(str(SIMILARITY_THRESHOLD))
         self.auto_threshold.set(AUTO_DETERMINE)
+        self.include_videos.set(INCLUDE_VIDEOS)
+        self.parse_dates.set(PARSE_DATES)
+        self.date_pattern.set(DATE_PATTERN)
+        self.separator.set(SEPARATOR)
+        self.count_start.set(COUNT_START)
         self.toggle_threshold()
+        self.toggle_date_pattern()
+        self.toggle_video_settings()
         self.log("Settings reset to defaults.")
 
     def log(self, message):
@@ -808,6 +985,7 @@ class ImageSorterGUI:
                 return
 
         self.is_processing = True
+        self.stop_event.clear()
         self.start_button.config(state=tk.DISABLED)
         self.stop_button.config(state=tk.NORMAL)
         self.progress.start()
@@ -819,7 +997,10 @@ class ImageSorterGUI:
         self.log(f"Threshold: {threshold_val if threshold_val else 'auto'}")
         self.log(f"Feature weights: {feature_weights}")
         self.log(f"Video frame position: {self.video_frame_percentage.get()}%")
+        self.log(f"Include videos: {self.include_videos.get()}")
         self.log(f"Prefix: '{self.prefix.get()}'")
+        self.log(f"Parse dates: {self.parse_dates.get()}")
+        self.log(f"Count start: {self.count_start.get()}")
         self.log(f"Dry Run: {self.dry_run.get()}")
         self.log(f"Backup: {self.backup.get()}")
         self.log("="*60 + "\n")
@@ -831,6 +1012,7 @@ class ImageSorterGUI:
                 threshold_val,
                 feature_weights,
                 self.video_frame_percentage.get(),
+                self.include_videos.get(),
             ),
             daemon=True
         )
@@ -842,9 +1024,22 @@ class ImageSorterGUI:
         threshold_val,
         feature_weights,
         video_frame_percentage,
+        include_videos,
     ):
         try:
-            image_files = get_video_image_files(folder, video_frame_percentage)
+            image_files = (
+                get_video_image_files(folder, self.stop_event, video_frame_percentage)
+                if include_videos
+                else []
+            )
+
+            if self.stop_event.is_set():
+                if image_files:
+                    cleanup_video_grabs(folder)
+                self.log("\nSorting stopped.")
+                self.on_complete(False)
+                return
+
             processing_videos = bool(image_files)
 
             if not processing_videos:
@@ -867,6 +1062,10 @@ class ImageSorterGUI:
                     prefix=self.prefix.get(),
                     dry_run=self.dry_run.get(),
                     backup=False,
+                    parse_dates=self.parse_dates.get(),
+                    date_pattern=self.date_pattern.get(),
+                    separator=self.separator.get(),
+                    count_start=self.count_start.get(),
                 )
                 rename_videos(
                     sorted_images,
@@ -874,6 +1073,10 @@ class ImageSorterGUI:
                     prefix=self.prefix.get(),
                     dry_run=self.dry_run.get(),
                     backup=self.backup.get(),
+                    parse_dates=self.parse_dates.get(),
+                    date_pattern=self.date_pattern.get(),
+                    separator=self.separator.get(),
+                    count_start=self.count_start.get(),
                 )
                 cleanup_video_grabs(folder)
             else:
@@ -881,7 +1084,11 @@ class ImageSorterGUI:
                     sorted_images,
                     prefix=self.prefix.get(),
                     dry_run=self.dry_run.get(),
-                    backup=self.backup.get()
+                    backup=self.backup.get(),
+                    parse_dates=self.parse_dates.get(),
+                    date_pattern=self.date_pattern.get(),
+                    separator=self.separator.get(),
+                    count_start=self.count_start.get(),
                 )
 
             self.on_complete(True)
@@ -913,9 +1120,9 @@ class ImageSorterGUI:
                                   "Check the log for details.")
 
     def stop_sorting(self):
-        messagebox.showinfo("Stop",
-                          "Stopping is not yet implemented.\n"
-                          "Please wait for the current operation to complete.")
+        self.stop_event.set()
+        self.stop_button.config(state=tk.DISABLED)
+        self.log("\nStop requested...")
 
 
 class TextRedirector:

@@ -12,6 +12,11 @@ DRY_RUN = True
 BACKUP = True
 SIMILARITY_THRESHOLD = 0.01
 AUTO_DETERMINE = False
+INCLUDE_VIDEOS = True
+PARSE_DATES = False
+DATE_PATTERN = r"[0-9]{4}[\.\-][0-9]{2}[\.\-][0-9]{2}"
+SEPARATOR = "_"
+COUNT_START = 1
 
 DEFAULT_FEATURE_WEIGHTS = (RGB_WEIGHT, HSV_WEIGHT, SPATIAL_WEIGHT, TEXTURE_WEIGHT, BRIGHTNESS_WEIGHT)
 
@@ -36,9 +41,14 @@ def read_user_settings() -> dict:
             "backup": BACKUP,
             "similarity_threshold": SIMILARITY_THRESHOLD,
             "auto_determine": AUTO_DETERMINE,
+            "include_videos": INCLUDE_VIDEOS,
+            "parse_dates": PARSE_DATES,
+            "date_pattern": DATE_PATTERN,
+            "separator": SEPARATOR,
+            "count_start": COUNT_START,
         }
 
-    settings = ConfigParser()
+    settings = ConfigParser(interpolation=None)
     with settings_path.open(encoding="utf-8") as settings_file:
         settings.read_file(settings_file)
 
@@ -65,6 +75,31 @@ def read_user_settings() -> dict:
             "auto_determine",
             fallback=AUTO_DETERMINE,
         ),
+        "include_videos": settings.getboolean(
+            "general",
+            "include_videos",
+            fallback=INCLUDE_VIDEOS,
+        ),
+        "parse_dates": settings.getboolean(
+            "renaming",
+            "parse_dates",
+            fallback=PARSE_DATES,
+        ),
+        "date_pattern": settings.get(
+            "renaming",
+            "date_pattern",
+            fallback=DATE_PATTERN,
+        ),
+        "separator": settings.get(
+            "renaming",
+            "separator",
+            fallback=SEPARATOR,
+        ),
+        "count_start": settings.getint(
+            "renaming",
+            "count_start",
+            fallback=COUNT_START,
+        ),
     }
 
 
@@ -79,6 +114,11 @@ def save_user_settings(
     backup,
     similarity_threshold,
     auto_determine,
+    include_videos,
+    parse_dates,
+    date_pattern,
+    separator,
+    count_start,
 ) -> None:
     settings_path = user_config_path(
         "Spectra",
@@ -86,7 +126,7 @@ def save_user_settings(
         ensure_exists=True,
     ) / "settings.ini"
 
-    settings = ConfigParser()
+    settings = ConfigParser(interpolation=None)
     if settings_path.exists():
         with settings_path.open(encoding="utf-8") as settings_file:
             settings.read_file(settings_file)
@@ -99,6 +139,8 @@ def save_user_settings(
         settings.add_section("general")
     if not settings.has_section("clustering"):
         settings.add_section("clustering")
+    if not settings.has_section("renaming"):
+        settings.add_section("renaming")
 
     settings.set("feature_weights", "rgb_weight", str(rgb_weight))
     settings.set("feature_weights", "hsv_weight", str(hsv_weight))
@@ -110,6 +152,11 @@ def save_user_settings(
     settings.set("general", "backup", str(backup))
     settings.set("clustering", "similarity_threshold", str(similarity_threshold))
     settings.set("clustering", "auto_determine", str(auto_determine))
+    settings.set("general", "include_videos", str(include_videos))
+    settings.set("renaming", "parse_dates", str(parse_dates))
+    settings.set("renaming", "date_pattern", str(date_pattern))
+    settings.set("renaming", "separator", str(separator))
+    settings.set("renaming", "count_start", str(count_start))
 
     with settings_path.open("w", encoding="utf-8") as settings_file:
         settings.write(settings_file)
