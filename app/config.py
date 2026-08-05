@@ -14,6 +14,7 @@ HSV_WEIGHT = 1.5
 SPATIAL_WEIGHT = 1.0
 TEXTURE_WEIGHT = 0.5
 BRIGHTNESS_WEIGHT = 0.8
+ASPECT_RATIO_WEIGHT = 0.25
 VIDEO_FRAME_PERCENTAGE = 50
 DRY_RUN = True
 BACKUP = True
@@ -27,7 +28,14 @@ COUNT_START = 1
 FOLDER_PATH = ""
 FILE_PREFIX = ""
 
-DEFAULT_FEATURE_WEIGHTS = (RGB_WEIGHT, HSV_WEIGHT, SPATIAL_WEIGHT, TEXTURE_WEIGHT, BRIGHTNESS_WEIGHT)
+DEFAULT_FEATURE_WEIGHTS = (
+    RGB_WEIGHT,
+    HSV_WEIGHT,
+    SPATIAL_WEIGHT,
+    TEXTURE_WEIGHT,
+    BRIGHTNESS_WEIGHT,
+    ASPECT_RATIO_WEIGHT,
+)
 
 IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp'}
 VIDEO_EXTENSIONS = {'.mp4', '.avi', '.gif', '.wmv', '.mpeg', '.mov', '.m4v'}
@@ -45,6 +53,7 @@ def read_user_settings() -> dict:
             "spatial_weight": SPATIAL_WEIGHT,
             "texture_weight": TEXTURE_WEIGHT,
             "brightness_weight": BRIGHTNESS_WEIGHT,
+            "aspect_ratio_weight": ASPECT_RATIO_WEIGHT,
             "video_frame_percentage": VIDEO_FRAME_PERCENTAGE,
             "dry_run": DRY_RUN,
             "backup": BACKUP,
@@ -69,6 +78,7 @@ def read_user_settings() -> dict:
         "spatial_weight": settings.getfloat("feature_weights", "spatial_weight"),
         "texture_weight": settings.getfloat("feature_weights", "texture_weight"),
         "brightness_weight": settings.getfloat("feature_weights", "brightness_weight"),
+        "aspect_ratio_weight": settings.getfloat("feature_weights", "aspect_ratio_weight"),
         "video_frame_percentage": settings.getint(
             "videos",
             "frame_percentage",
@@ -130,6 +140,7 @@ def save_user_settings(
     spatial_weight,
     texture_weight,
     brightness_weight,
+    aspect_ratio_weight,
     video_frame_percentage,
     dry_run,
     backup,
@@ -170,6 +181,7 @@ def save_user_settings(
     settings.set("feature_weights", "spatial_weight", str(spatial_weight))
     settings.set("feature_weights", "texture_weight", str(texture_weight))
     settings.set("feature_weights", "brightness_weight", str(brightness_weight))
+    settings.set("feature_weights", "aspect_ratio_weight", str(aspect_ratio_weight))
     settings.set("videos", "frame_percentage", str(video_frame_percentage))
     settings.set("general", "dry_run", str(dry_run))
     settings.set("general", "backup", str(backup))

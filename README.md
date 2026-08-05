@@ -12,7 +12,7 @@ Spectra automatically organizes your image collections by analyzing color, textu
 
 ## ✨ Features
 
-- **🔍 Multi-dimensional visual analysis**: Extracts color histograms, spatial patterns, texture features, and brightness metrics
+- **🔍 Multi-dimensional visual analysis**: Extracts color histograms, spatial patterns, texture features, brightness metrics, and aspect ratio
 - **🧩 Smart clustering**: Uses DBSCAN algorithm to group visually similar images
 - **🔄 Nearest-neighbor sorting**: Creates smooth visual transitions within and between clusters
 - **🖥️ User-friendly GUI**: Clean Tkinter interface—no command line needed

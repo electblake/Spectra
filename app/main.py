@@ -7,6 +7,7 @@ import subprocess
 import sys
 import threading
 import tkinter as tk
+import uuid
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
@@ -142,11 +143,23 @@ def extract_brightness_contrast(img: Image.Image) -> np.ndarray:
     return np.array(features)
 
 
+def extract_aspect_ratio(img: Image.Image) -> np.ndarray:
+    width, height = img.size
+    return np.array([np.tanh(np.log(width / height))])
+
+
 def calculate_visual_features(
     image_path: str,
-    feature_weights: tuple[float, float, float, float, float] = DEFAULT_FEATURE_WEIGHTS,
+    feature_weights: tuple[float, float, float, float, float, float] = DEFAULT_FEATURE_WEIGHTS,
 ) -> np.ndarray:
-    rgb_weight, hsv_weight, spatial_weight, texture_weight, brightness_weight = feature_weights
+    (
+        rgb_weight,
+        hsv_weight,
+        spatial_weight,
+        texture_weight,
+        brightness_weight,
+        aspect_ratio_weight,
+    ) = feature_weights
 
     try:
         img = Image.open(image_path)
@@ -156,6 +169,7 @@ def calculate_visual_features(
         spatial_color = extract_spatial_color_features(img, grid_size=4)
         texture = extract_texture_features(img)
         brightness = extract_brightness_contrast(img)
+        aspect_ratio = extract_aspect_ratio(img)
 
         features = np.concatenate([
             rgb_hist * rgb_weight,
@@ -163,6 +177,7 @@ def calculate_visual_features(
             spatial_color * spatial_weight,
             texture * texture_weight,
             brightness * brightness_weight,
+            aspect_ratio * aspect_ratio_weight,
         ])
 
         norm = np.linalg.norm(features)
@@ -305,10 +320,10 @@ def sort_cluster_internally(cluster_features: np.ndarray, cluster_items: list) -
 def sort_with_tight_clustering(
     image_files: list[Path],
     similarity_threshold: float | None = None,
-    feature_weights: tuple[float, float, float, float, float] = DEFAULT_FEATURE_WEIGHTS,
+    feature_weights: tuple[float, float, float, float, float, float] = DEFAULT_FEATURE_WEIGHTS,
 ) -> list[tuple[Path, np.ndarray]]:
     print(f"Loading {len(image_files)} images and extracting visual features...")
-    print("(This includes color histograms, spatial layout, texture, and brightness)\n")
+    print("(This includes color histograms, spatial layout, texture, brightness, and aspect ratio)\n")
 
     images_with_features = []
     features = []
@@ -531,11 +546,15 @@ def rename_videos(sorted_images: list[tuple[Path, np.ndarray]],
 
     padding = len(str(count_start + len(video_files) - 1))
     temp_names = []
+    temp_run_id = uuid.uuid4().hex
 
     print(f"\n{'DRY RUN - ' if dry_run else ''}Renaming videos...")
 
     for i, video_path in enumerate(video_files, 1):
-        temp_name = folder / f"__temp_video_{i:0{padding}d}{video_path.suffix}"
+        temp_name = (
+            folder
+            / f"__temp_video_{temp_run_id}_{i:0{padding}d}{video_path.suffix}"
+        )
 
         if not dry_run:
             if backup:
@@ -600,6 +619,7 @@ class ImageSorterGUI:
         self.spatial_weight = tk.DoubleVar(value=user_settings["spatial_weight"])
         self.texture_weight = tk.DoubleVar(value=user_settings["texture_weight"])
         self.brightness_weight = tk.DoubleVar(value=user_settings["brightness_weight"])
+        self.aspect_ratio_weight = tk.DoubleVar(value=user_settings["aspect_ratio_weight"])
         self.video_frame_percentage = tk.IntVar(
             value=user_settings["video_frame_percentage"]
         )
@@ -795,6 +815,12 @@ class ImageSorterGUI:
             orient=tk.HORIZONTAL, variable=self.brightness_weight
         ).grid(row=4, column=1, sticky=(tk.W, tk.E))
 
+        ttk.Label(weights_frame, text="Aspect ratio:").grid(row=5, column=0, sticky=tk.W)
+        tk.Scale(
+            weights_frame, from_=0.0, to=3.0, resolution=0.05,
+            orient=tk.HORIZONTAL, variable=self.aspect_ratio_weight
+        ).grid(row=5, column=1, sticky=(tk.W, tk.E))
+
         videos_frame = ttk.LabelFrame(main_frame, text="Videos", padding="10")
         videos_frame.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
         videos_frame.columnconfigure(1, weight=1)
@@ -854,10 +880,17 @@ class ImageSorterGUI:
 
         self.defaults_button = ttk.Button(
             button_frame,
-            text="Defaults",
+            text="Reset Default",
             command=self.restore_default_settings,
         )
         self.defaults_button.pack(side=tk.LEFT, padx=5)
+
+        self.open_folder_button = ttk.Button(
+            button_frame,
+            text="Open Folder",
+            command=self.open_input_folder,
+        )
+        self.open_folder_button.pack(side=tk.LEFT, padx=5)
 
         self.install_file_explorer_button = ttk.Button(
             button_frame,
@@ -942,6 +975,7 @@ class ImageSorterGUI:
             self.spatial_weight.get(),
             self.texture_weight.get(),
             self.brightness_weight.get(),
+            self.aspect_ratio_weight.get(),
             self.video_frame_percentage.get(),
             self.dry_run.get(),
             self.backup.get(),
@@ -958,14 +992,20 @@ class ImageSorterGUI:
         self.log("Settings saved.")
 
     def restore_default_settings(self):
-        rgb_weight, hsv_weight, spatial_weight, texture_weight, brightness_weight = (
-            DEFAULT_FEATURE_WEIGHTS
-        )
+        (
+            rgb_weight,
+            hsv_weight,
+            spatial_weight,
+            texture_weight,
+            brightness_weight,
+            aspect_ratio_weight,
+        ) = DEFAULT_FEATURE_WEIGHTS
         self.rgb_weight.set(rgb_weight)
         self.hsv_weight.set(hsv_weight)
         self.spatial_weight.set(spatial_weight)
         self.texture_weight.set(texture_weight)
         self.brightness_weight.set(brightness_weight)
+        self.aspect_ratio_weight.set(aspect_ratio_weight)
         self.video_frame_percentage.set(VIDEO_FRAME_PERCENTAGE)
         self.dry_run.set(DRY_RUN)
         self.backup.set(BACKUP)
@@ -1016,6 +1056,7 @@ class ImageSorterGUI:
             self.spatial_weight.get(),
             self.texture_weight.get(),
             self.brightness_weight.get(),
+            self.aspect_ratio_weight.get(),
         )
 
         if not self.dry_run.get():
