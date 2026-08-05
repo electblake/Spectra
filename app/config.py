@@ -1,6 +1,13 @@
+import tomllib
 from configparser import ConfigParser
+from pathlib import Path
 
 from platformdirs import user_config_path
+
+APP_NAME = "Spectra"
+APP_DESCRIPTION = "Visual Similarity Sorter"
+with (Path(__file__).parent.parent / "pyproject.toml").open("rb") as pyproject_file:
+    APP_VERSION = tomllib.load(pyproject_file)["project"]["version"]
 
 RGB_WEIGHT = 2.0
 HSV_WEIGHT = 1.5
@@ -27,7 +34,7 @@ VIDEO_EXTENSIONS = {'.mp4', '.avi', '.gif', '.wmv', '.mpeg', '.mov', '.m4v'}
 
 def read_user_settings() -> dict:
     settings_path = user_config_path(
-        "Spectra",
+        APP_NAME,
         appauthor=False,
     ) / "settings.ini"
 
@@ -137,7 +144,7 @@ def save_user_settings(
     file_prefix,
 ) -> None:
     settings_path = user_config_path(
-        "Spectra",
+        APP_NAME,
         appauthor=False,
         ensure_exists=True,
     ) / "settings.ini"

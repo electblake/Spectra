@@ -7,7 +7,6 @@ import subprocess
 import sys
 import threading
 import tkinter as tk
-import tomllib
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
@@ -18,6 +17,9 @@ from scipy.spatial.distance import cdist
 from sklearn.cluster import DBSCAN
 
 from app.config import (
+    APP_DESCRIPTION,
+    APP_NAME,
+    APP_VERSION,
     AUTO_DETERMINE,
     BACKUP,
     COUNT_START,
@@ -36,11 +38,9 @@ from app.config import (
     read_user_settings,
     save_user_settings,
 )
+from app.install import install as install_file_explorer
 
-__name__ = "Spectra"
-__desc__ = "Visual Similarity Sorter"
-with (Path(__file__).parent.parent / "pyproject.toml").open("rb") as pyproject_file:
-    __version__ = tomllib.load(pyproject_file)["project"]["version"]
+__version__ = APP_VERSION
 
 VIDEO_GRABS_FOLDER = ".spectra_video_grabs"
 VIDEO_OPEN_TIMEOUT_MS = 10_000
@@ -585,7 +585,7 @@ def rename_videos(sorted_images: list[tuple[Path, np.ndarray]],
 class ImageSorterGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title(f"{__name__} v{__version__} - {__desc__}")
+        self.root.title(f"{APP_NAME} v{__version__} - {APP_DESCRIPTION}")
         self.root.geometry("960x960")
         self.root.resizable(True, True)
 
@@ -643,7 +643,7 @@ class ImageSorterGUI:
 
         row = 0
 
-        title = ttk.Label(main_frame, text=f"{__name__} v{__version__}",
+        title = ttk.Label(main_frame, text=f"{APP_NAME} v{__version__}",
                          font=('Arial', 16, 'bold'))
         title.grid(row=row, column=0, columnspan=3, pady=(0, 20))
         row += 1
@@ -858,6 +858,13 @@ class ImageSorterGUI:
             command=self.restore_default_settings,
         )
         self.defaults_button.pack(side=tk.LEFT, padx=5)
+
+        self.install_file_explorer_button = ttk.Button(
+            button_frame,
+            text="Install in File Explorer",
+            command=self.install_in_file_explorer,
+        )
+        self.install_file_explorer_button.pack(side=tk.LEFT, padx=5)
 
         self.progress = ttk.Progressbar(main_frame, mode='indeterminate')
         self.progress.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
@@ -1186,6 +1193,11 @@ class ImageSorterGUI:
             text="Close",
             command=dialog.destroy,
         ).pack(side=tk.LEFT, padx=5)
+        ttk.Button(
+            button_frame,
+            text="Quit",
+            command=self.root.destroy,
+        ).pack(side=tk.LEFT, padx=5)
 
         dialog.update_idletasks()
         x = self.root.winfo_rootx() + (self.root.winfo_width() - dialog.winfo_width()) // 2
@@ -1200,6 +1212,13 @@ class ImageSorterGUI:
             subprocess.Popen(["open", folder])
         else:
             subprocess.Popen(["xdg-open", folder])
+
+    def install_in_file_explorer(self):
+        install_file_explorer()
+        messagebox.showinfo(
+            "File Explorer",
+            f"{APP_NAME} was installed in the File Explorer context menu.",
+        )
 
     def stop_sorting(self):
         self.stop_event.set()
@@ -1222,7 +1241,9 @@ class TextRedirector:
 
 def main():
     root = tk.Tk()
-    app = ImageSorterGUI(root)  # noqa: F841
+    app = ImageSorterGUI(root)
+    if len(sys.argv) > 1:
+        app.folder_path.set(sys.argv[1])
     root.mainloop()
 
 
