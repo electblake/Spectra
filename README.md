@@ -1,12 +1,15 @@
-# 🎨 Spectra
+<center>
+<img src="Spectra-cropped.png" alt="Spectra" width="350">
+<h3>Intelligent image/video sorting by visual similarity</h3>
+<p>Spectra automatically organizes your image collections by analyzing color, texture, and content similarity. Say goodbye to chaotic folders — let your images flow in visual harmony.</p>
+</center>
 
-**Intelligent image sorting by visual similarity**
 
-Spectra automatically organizes your image collections by analyzing color, texture, and content similarity. Say goodbye to chaotic folders — let your images flow in visual harmony.
-
-![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.8+-blue.svg" alt="Python Version">
+  <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
+  <img src="https://img.shields.io/badge/platform-Windows-lightgrey.svg" alt="Platform">
+</p>
 
 ---
 
@@ -139,7 +142,7 @@ Uses DBSCAN (Density-Based Spatial Clustering) to:
 ```python
 # In code, adjust threshold parameter:
 sorted_images = sort_with_tight_clustering(
-    image_files, 
+    image_files,
     similarity_threshold=0.015  # Lower = tighter clusters
 )
 ```

@@ -1,6 +1,8 @@
 """Spectra application."""
 
+import multiprocessing
 import os
+import queue
 import re
 import shutil
 import subprocess
@@ -46,6 +48,40 @@ __version__ = APP_VERSION
 VIDEO_GRABS_FOLDER = ".spectra_video_grabs"
 VIDEO_OPEN_TIMEOUT_MS = 10_000
 VIDEO_READ_TIMEOUT_MS = 10_000
+VIDEO_FRAME_PROCESS_TIMEOUT_SECONDS = 25
+
+
+def extract_video_frames_worker(connection) -> None:
+    while True:
+        task = connection.recv()
+        if task is None:
+            break
+
+        video_file_path, image_file_path, frame_percentage = task
+        video = cv2.VideoCapture(
+            video_file_path,
+            cv2.CAP_FFMPEG,
+            [
+                cv2.CAP_PROP_OPEN_TIMEOUT_MSEC,
+                VIDEO_OPEN_TIMEOUT_MS,
+                cv2.CAP_PROP_READ_TIMEOUT_MSEC,
+                VIDEO_READ_TIMEOUT_MS,
+            ],
+        )
+        frame_count = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+        frame_number = round((frame_count - 1) * frame_percentage / 100)
+        video.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+        frame_read, frame = video.read()
+        video.release()
+
+        frame_valid = frame_read and frame is not None and frame.size > 0
+        if frame_valid:
+            image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            image.save(image_file_path)
+
+        connection.send((frame_valid, frame_number))
+
+    connection.close()
 
 def extract_color_histogram(img: Image.Image, bins_per_channel: int = 32) -> np.ndarray:
     img_rgb = img.convert('RGB')
@@ -235,9 +271,21 @@ def get_video_image_files(
 
     print(f"Extracting frames from {len(video_files)} videos...")
 
+    process_context = multiprocessing.get_context("spawn")
+    parent_connection, child_connection = process_context.Pipe()
+    video_process = process_context.Process(
+        target=extract_video_frames_worker,
+        args=(child_connection,),
+    )
+    video_process.start()
+    child_connection.close()
+
     image_files = []
     for i, video_file_path in enumerate(video_files, 1):
         if stop_event.is_set():
+            parent_connection.send(None)
+            video_process.join()
+            parent_connection.close()
             cleanup_video_grabs(folder_path)
             print("Frame extraction stopped.")
             return []
@@ -254,35 +302,47 @@ def get_video_image_files(
                 print(f"  Extracted {i}/{len(video_files)}")
             continue
 
-        video = cv2.VideoCapture(
-            str(video_file_path),
-            cv2.CAP_FFMPEG,
-            [
-                cv2.CAP_PROP_OPEN_TIMEOUT_MSEC,
-                VIDEO_OPEN_TIMEOUT_MS,
-                cv2.CAP_PROP_READ_TIMEOUT_MSEC,
-                VIDEO_READ_TIMEOUT_MS,
-            ],
+        image_file_path = video_grabs_folder / f"{video_file_path.name}.png"
+        parent_connection.send(
+            (str(video_file_path), str(image_file_path), frame_percentage)
         )
-        frame_count = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
-        frame_number = round((frame_count - 1) * frame_percentage / 100)
-        video.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
-        frame_read, frame = video.read()
-        video.release()
 
-        if not frame_read or frame is None or frame.size == 0:
+        if parent_connection.poll(VIDEO_FRAME_PROCESS_TIMEOUT_SECONDS):
+            frame_valid, frame_number = parent_connection.recv()
+        else:
+            video_process.terminate()
+            video_process.join()
+            parent_connection.close()
+            parent_connection, child_connection = process_context.Pipe()
+            video_process = process_context.Process(
+                target=extract_video_frames_worker,
+                args=(child_connection,),
+            )
+            video_process.start()
+            child_connection.close()
+            print(
+                f"  Warning: Skipping {video_file_path.name}: "
+                f"frame extraction timed out after "
+                f"{VIDEO_FRAME_PROCESS_TIMEOUT_SECONDS} seconds"
+            )
+            if i % 10 == 0 or i == len(video_files):
+                print(f"  Extracted {i}/{len(video_files)}")
+            continue
+
+        if not frame_valid:
             print(
                 f"  Warning: Skipping {video_file_path.name}: "
                 f"could not read frame {frame_number}"
             )
         else:
-            image_file_path = video_grabs_folder / f"{video_file_path.name}.png"
-            image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-            image.save(image_file_path)
             image_files.append(image_file_path)
 
         if i % 10 == 0 or i == len(video_files):
             print(f"  Extracted {i}/{len(video_files)}")
+
+    parent_connection.send(None)
+    video_process.join()
+    parent_connection.close()
 
     return sorted(image_files)
 
@@ -1024,9 +1084,7 @@ class ImageSorterGUI:
         self.log("Settings reset to defaults.")
 
     def log(self, message):
-        self.log_text.insert(tk.END, message + "\n")
-        self.log_text.see(tk.END)
-        self.root.update_idletasks()
+        print(message)
 
     def start_sorting(self):
         folder = self.folder_path.get()
@@ -1271,10 +1329,17 @@ class TextRedirector:
     def __init__(self, widget, tag="stdout"):
         self.widget = widget
         self.tag = tag
+        self.text_queue = queue.Queue()
+        self.widget.after(50, self.write_queued_text)
 
     def write(self, text):
-        self.widget.insert(tk.END, text)
+        self.text_queue.put(text)
+
+    def write_queued_text(self):
+        while not self.text_queue.empty():
+            self.widget.insert(tk.END, self.text_queue.get_nowait())
         self.widget.see(tk.END)
+        self.widget.after(50, self.write_queued_text)
 
     def flush(self):
         pass
@@ -1289,4 +1354,5 @@ def main():
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     main()
