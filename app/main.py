@@ -1,7 +1,9 @@
 """Spectra application."""
 
+import os
 import re
 import shutil
+import subprocess
 import sys
 import threading
 import tkinter as tk
@@ -22,6 +24,8 @@ from app.config import (
     DATE_PATTERN,
     DEFAULT_FEATURE_WEIGHTS,
     DRY_RUN,
+    FILE_PREFIX,
+    FOLDER_PATH,
     IMAGE_EXTENSIONS,
     INCLUDE_VIDEOS,
     PARSE_DATES,
@@ -39,6 +43,8 @@ with (Path(__file__).parent.parent / "pyproject.toml").open("rb") as pyproject_f
     __version__ = tomllib.load(pyproject_file)["project"]["version"]
 
 VIDEO_GRABS_FOLDER = ".spectra_video_grabs"
+VIDEO_OPEN_TIMEOUT_MS = 10_000
+VIDEO_READ_TIMEOUT_MS = 10_000
 
 def extract_color_histogram(img: Image.Image, bins_per_channel: int = 32) -> np.ndarray:
     img_rgb = img.convert('RGB')
@@ -221,7 +227,28 @@ def get_video_image_files(
             print("Frame extraction stopped.")
             return []
 
-        video = cv2.VideoCapture(str(video_file_path))
+        if any(
+            0xD800 <= ord(character) <= 0xDFFF
+            for character in str(video_file_path)
+        ):
+            print(
+                f"  Warning: Skipping invalid Unicode filename: "
+                f"{video_file_path.name!a}"
+            )
+            if i % 10 == 0 or i == len(video_files):
+                print(f"  Extracted {i}/{len(video_files)}")
+            continue
+
+        video = cv2.VideoCapture(
+            str(video_file_path),
+            cv2.CAP_FFMPEG,
+            [
+                cv2.CAP_PROP_OPEN_TIMEOUT_MSEC,
+                VIDEO_OPEN_TIMEOUT_MS,
+                cv2.CAP_PROP_READ_TIMEOUT_MSEC,
+                VIDEO_READ_TIMEOUT_MS,
+            ],
+        )
         frame_count = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
         frame_number = round((frame_count - 1) * frame_percentage / 100)
         video.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
@@ -564,8 +591,8 @@ class ImageSorterGUI:
 
         user_settings = read_user_settings()
 
-        self.folder_path = tk.StringVar()
-        self.prefix = tk.StringVar(value="")
+        self.folder_path = tk.StringVar(value=user_settings["folder_path"])
+        self.prefix = tk.StringVar(value=user_settings["file_prefix"])
         self.threshold = tk.StringVar(value=str(user_settings["similarity_threshold"]))
         self.auto_threshold = tk.BooleanVar(value=user_settings["auto_determine"])
         self.rgb_weight = tk.DoubleVar(value=user_settings["rgb_weight"])
@@ -918,6 +945,8 @@ class ImageSorterGUI:
             self.date_pattern.get(),
             self.separator.get(),
             self.count_start.get(),
+            self.folder_path.get(),
+            self.prefix.get(),
         )
         self.log("Settings saved.")
 
@@ -940,6 +969,8 @@ class ImageSorterGUI:
         self.date_pattern.set(DATE_PATTERN)
         self.separator.set(SEPARATOR)
         self.count_start.set(COUNT_START)
+        self.folder_path.set(FOLDER_PATH)
+        self.prefix.set(FILE_PREFIX)
         self.toggle_threshold()
         self.toggle_date_pattern()
         self.toggle_video_settings()
@@ -1116,14 +1147,59 @@ class ImageSorterGUI:
 
         if success:
             if self.dry_run.get():
-                messagebox.showinfo("Dry Run Complete",
-                                  "Dry run completed successfully!\n"
-                                  "Check the log for preview of changes.\n\n"
-                                  "Uncheck 'Dry Run' to actually rename files.")
+                self.show_completion_dialog(
+                    "Dry Run Complete",
+                    "Dry run completed successfully!\n"
+                    "Check the log for preview of changes.\n\n"
+                    "Uncheck 'Dry Run' to actually rename files.",
+                )
             else:
-                messagebox.showinfo("Success",
-                                  "Media sorted and renamed successfully!\n"
-                                  "Check the log for details.")
+                self.show_completion_dialog(
+                    "Success",
+                    "Media sorted and renamed successfully!\n"
+                    "Check the log for details.",
+                )
+
+    def show_completion_dialog(self, title, message):
+        dialog = tk.Toplevel(self.root)
+        dialog.title(title)
+        dialog.transient(self.root)
+        dialog.resizable(False, False)
+        dialog.grab_set()
+
+        ttk.Label(
+            dialog,
+            text=message,
+            justify=tk.LEFT,
+            padding=20,
+        ).pack()
+
+        button_frame = ttk.Frame(dialog, padding=(10, 0, 10, 10))
+        button_frame.pack()
+        ttk.Button(
+            button_frame,
+            text="Open Folder",
+            command=self.open_input_folder,
+        ).pack(side=tk.LEFT, padx=5)
+        ttk.Button(
+            button_frame,
+            text="Close",
+            command=dialog.destroy,
+        ).pack(side=tk.LEFT, padx=5)
+
+        dialog.update_idletasks()
+        x = self.root.winfo_rootx() + (self.root.winfo_width() - dialog.winfo_width()) // 2
+        y = self.root.winfo_rooty() + (self.root.winfo_height() - dialog.winfo_height()) // 2
+        dialog.geometry(f"+{x}+{y}")
+
+    def open_input_folder(self):
+        folder = str(Path(self.folder_path.get()))
+        if sys.platform == "win32":
+            os.startfile(folder)
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", folder])
+        else:
+            subprocess.Popen(["xdg-open", folder])
 
     def stop_sorting(self):
         self.stop_event.set()

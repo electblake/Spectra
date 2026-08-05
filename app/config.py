@@ -17,6 +17,8 @@ PARSE_DATES = False
 DATE_PATTERN = r"[0-9]{4}[\.\-][0-9]{2}[\.\-][0-9]{2}"
 SEPARATOR = "_"
 COUNT_START = 1
+FOLDER_PATH = ""
+FILE_PREFIX = ""
 
 DEFAULT_FEATURE_WEIGHTS = (RGB_WEIGHT, HSV_WEIGHT, SPATIAL_WEIGHT, TEXTURE_WEIGHT, BRIGHTNESS_WEIGHT)
 
@@ -46,6 +48,8 @@ def read_user_settings() -> dict:
             "date_pattern": DATE_PATTERN,
             "separator": SEPARATOR,
             "count_start": COUNT_START,
+            "folder_path": FOLDER_PATH,
+            "file_prefix": FILE_PREFIX,
         }
 
     settings = ConfigParser(interpolation=None)
@@ -100,6 +104,16 @@ def read_user_settings() -> dict:
             "count_start",
             fallback=COUNT_START,
         ),
+        "folder_path": settings.get(
+            "general",
+            "folder_path",
+            fallback=FOLDER_PATH,
+        ),
+        "file_prefix": settings.get(
+            "renaming",
+            "file_prefix",
+            fallback=FILE_PREFIX,
+        ),
     }
 
 
@@ -119,6 +133,8 @@ def save_user_settings(
     date_pattern,
     separator,
     count_start,
+    folder_path,
+    file_prefix,
 ) -> None:
     settings_path = user_config_path(
         "Spectra",
@@ -157,6 +173,8 @@ def save_user_settings(
     settings.set("renaming", "date_pattern", str(date_pattern))
     settings.set("renaming", "separator", str(separator))
     settings.set("renaming", "count_start", str(count_start))
+    settings.set("general", "folder_path", str(folder_path))
+    settings.set("renaming", "file_prefix", str(file_prefix))
 
     with settings_path.open("w", encoding="utf-8") as settings_file:
         settings.write(settings_file)
