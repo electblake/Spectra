@@ -678,7 +678,7 @@ class ImageSorterGUI:
         self.root.geometry("1440x960")
         self.root.resizable(True, True)
 
-        user_settings = read_user_settings()
+        user_settings, self.loaded_settings_path = read_user_settings()
 
         self.folder_path = tk.StringVar(value=user_settings["folder_path"])
         self.prefix = tk.StringVar(value=user_settings["file_prefix"])
@@ -993,6 +993,14 @@ class ImageSorterGUI:
 
         sys.stdout = TextRedirector(self.log_text, "stdout")
 
+        if self.loaded_settings_path is not None:
+            self.log(f"Settings file loaded: {self.loaded_settings_path}")
+        self.log_settings(
+            "Settings loaded:"
+            if self.loaded_settings_path is not None
+            else "Default settings loaded:"
+        )
+        self.log("")
         self.log("Ready. Select a folder containing images or videos to sort.")
         self.log(f"Supported image formats: {', '.join(sorted(IMAGE_EXTENSIONS))}")
         self.log(f"Supported video formats: {', '.join(sorted(VIDEO_EXTENSIONS))}")
@@ -1100,7 +1108,33 @@ class ImageSorterGUI:
         self.toggle_threshold()
         self.toggle_date_pattern()
         self.toggle_video_settings()
-        self.log("Settings reset to defaults.")
+        self.log_settings("\nSettings reset to defaults:")
+
+    def log_settings(self, heading):
+        settings = (
+            ("Media folder", self.folder_path.get()),
+            ("File prefix", self.prefix.get()),
+            ("Similarity threshold", self.threshold.get()),
+            ("Auto-determine threshold", self.auto_threshold.get()),
+            ("RGB histogram weight", self.rgb_weight.get()),
+            ("HSV histogram weight", self.hsv_weight.get()),
+            ("Spatial color weight", self.spatial_weight.get()),
+            ("Texture weight", self.texture_weight.get()),
+            ("Brightness and contrast weight", self.brightness_weight.get()),
+            ("Aspect ratio weight", self.aspect_ratio_weight.get()),
+            ("Include videos", self.include_videos.get()),
+            ("Video frame position (%)", self.video_frame_percentage.get()),
+            ("Dry run", self.dry_run.get()),
+            ("Create backup", self.backup.get()),
+            ("Parse dates", self.parse_dates.get()),
+            ("Date pattern", self.date_pattern.get()),
+            ("Separator", self.separator.get()),
+            ("Count start", self.count_start.get()),
+        )
+
+        self.log(heading)
+        for name, value in settings:
+            self.log(f"  {name}: {value!r}")
 
     def log(self, message):
         print(message)

@@ -40,7 +40,7 @@ DEFAULT_FEATURE_WEIGHTS = (
 IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp'}
 VIDEO_EXTENSIONS = {'.mp4', '.avi', '.gif', '.wmv', '.mpeg', '.mov', '.m4v'}
 
-def read_user_settings() -> dict:
+def read_user_settings() -> tuple[dict, Path | None]:
     settings_path = user_config_path(
         APP_NAME,
         appauthor=False,
@@ -66,7 +66,7 @@ def read_user_settings() -> dict:
             "count_start": COUNT_START,
             "folder_path": FOLDER_PATH,
             "file_prefix": FILE_PREFIX,
-        }
+        }, None
 
     settings = ConfigParser(interpolation=None)
     with settings_path.open(encoding="utf-8") as settings_file:
@@ -131,7 +131,7 @@ def read_user_settings() -> dict:
             "file_prefix",
             fallback=FILE_PREFIX,
         ),
-    }
+    }, settings_path
 
 
 def save_user_settings(
