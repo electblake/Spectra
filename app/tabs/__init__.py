@@ -1,0 +1,1 @@
+"""Spectra notebook tabs."""

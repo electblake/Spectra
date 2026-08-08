@@ -1,6 +1,8 @@
 import shutil
 import sys
+import tkinter as tk
 from pathlib import Path
+from tkinter import messagebox, ttk
 
 from app.config import APP_NAME
 
@@ -14,6 +16,37 @@ MENU_CONTEXTS = (
     (r"Software\Classes\Directory\Background\shell", "%V"),
     (r"Software\Classes\Drive\shell", "%1"),
 )
+
+
+class ExtrasTab(ttk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
+
+        self.install_file_explorer_button = ttk.Button(
+            self,
+            text="Install in File Explorer",
+            command=self.install_in_file_explorer,
+        )
+        self.install_file_explorer_button.grid(
+            row=0,
+            column=0,
+            padx=10,
+            pady=10,
+        )
+        ttk.Label(
+            self,
+            text=(
+                'Adds "Open in Spectra" to File Explorer right-click menus for '
+                "folders, folder backgrounds, and drives."
+            ),
+        ).grid(row=1, column=0, padx=10, pady=(0, 10), sticky=tk.W)
+
+    def install_in_file_explorer(self):
+        install()
+        messagebox.showinfo(
+            "File Explorer",
+            f"{APP_NAME} was installed in the File Explorer context menu.",
+        )
 
 
 def _launcher_command() -> list[str]:

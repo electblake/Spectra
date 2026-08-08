@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-08
+
+### Added
+
+- Added a tabbed interface with an Extras tab for File Explorer integration.
+
+### Changed
+
+- Expanded the main window and displayed log output beside the sorting controls.
+- Reorganized video, run-option, progress, and action controls.
+- Moved File Explorer integration into the packaged `app.tabs` module.
+
 ## [0.3.3] - 2026-08-08
 
 ### Changed
@@ -70,7 +82,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made `pyproject.toml` the sole source of the application version.
 - Refined application metadata, typing, formatting, and documentation.
 
-[Unreleased]: https://github.com/electblake/Spectra/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/electblake/Spectra/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/electblake/Spectra/compare/v0.3.3...v0.4.0
 [0.3.3]: https://github.com/electblake/Spectra/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/electblake/Spectra/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/electblake/Spectra/compare/36eec17...v0.3.1

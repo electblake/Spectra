@@ -41,7 +41,7 @@ from app.config import (
     read_user_settings,
     save_user_settings,
 )
-from app.install import install as install_file_explorer
+from app.tabs import extras
 
 __version__ = APP_VERSION
 
@@ -675,7 +675,7 @@ class ImageSorterGUI:
     def __init__(self, root):
         self.root = root
         self.root.title(f"{APP_NAME} v{__version__} - {APP_DESCRIPTION}")
-        self.root.geometry("960x960")
+        self.root.geometry("1440x960")
         self.root.resizable(True, True)
 
         user_settings = read_user_settings()
@@ -709,11 +709,33 @@ class ImageSorterGUI:
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
 
-        self.main_canvas = tk.Canvas(self.root, highlightthickness=0)
+        self.main_panes = ttk.Panedwindow(self.root, orient=tk.HORIZONTAL)
+        self.main_panes.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        controls_pane = ttk.Frame(self.main_panes)
+        log_frame = ttk.Frame(self.main_panes, padding="5")
+        self.main_panes.add(controls_pane, weight=1)
+        self.main_panes.add(log_frame, weight=1)
+
+        controls_pane.columnconfigure(0, weight=1)
+        controls_pane.rowconfigure(0, weight=1)
+
+        self.notebook = ttk.Notebook(controls_pane)
+        self.notebook.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        self.sort_rename_tab = ttk.Frame(self.notebook)
+        self.extras_tab = extras.ExtrasTab(self.notebook)
+        self.notebook.add(self.sort_rename_tab, text="Sort & Rename")
+        self.notebook.add(self.extras_tab, text="Extras")
+
+        self.sort_rename_tab.columnconfigure(0, weight=1)
+        self.sort_rename_tab.rowconfigure(0, weight=1)
+
+        self.main_canvas = tk.Canvas(self.sort_rename_tab, highlightthickness=0)
         self.main_canvas.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
         self.main_scrollbar = ttk.Scrollbar(
-            self.root,
+            self.sort_rename_tab,
             orient=tk.VERTICAL,
             command=self.main_canvas.yview,
         )
@@ -743,11 +765,6 @@ class ImageSorterGUI:
         folder_entry.grid(row=row, column=1, sticky=(tk.W, tk.E), padx=5)
         ttk.Button(main_frame, text="Browse...", command=self.browse_folder).grid(
             row=row, column=2, padx=5
-        )
-        row += 1
-
-        ttk.Separator(main_frame, orient='horizontal').grid(
-            row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=15
         )
         row += 1
 
@@ -891,42 +908,48 @@ class ImageSorterGUI:
             orient=tk.HORIZONTAL, variable=self.aspect_ratio_weight
         ).grid(row=5, column=1, sticky=(tk.W, tk.E))
 
-        videos_frame = ttk.LabelFrame(main_frame, text="Videos", padding="10")
+        videos_frame = ttk.LabelFrame(main_frame, text="Video", padding="10")
         videos_frame.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
         videos_frame.columnconfigure(1, weight=1)
         row += 1
 
-        ttk.Checkbutton(
-            videos_frame,
-            text="Include videos",
-            variable=self.include_videos,
-            command=self.toggle_video_settings,
-        ).grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
-
-        ttk.Label(videos_frame, text="Frame position (%):").grid(
-            row=1, column=0, sticky=tk.W
+        ttk.Label(videos_frame, text="Video Frame position (%):").grid(
+            row=0, column=0, sticky=tk.W
         )
         self.video_frame_scale = tk.Scale(
             videos_frame, from_=0, to=100, resolution=1,
             orient=tk.HORIZONTAL, variable=self.video_frame_percentage
         )
-        self.video_frame_scale.grid(row=1, column=1, sticky=(tk.W, tk.E))
+        self.video_frame_scale.grid(row=0, column=1, sticky=(tk.W, tk.E))
         self.toggle_video_settings()
 
         options_frame = ttk.Frame(main_frame)
-        options_frame.grid(row=row, column=0, columnspan=3, sticky=tk.W, pady=5)
+        options_frame.grid(row=row, column=0, columnspan=3, pady=5)
         row += 1
 
+        check_frame = ttk.Frame(main_frame)
+        check_frame.grid(row=row, column=0, columnspan=3, pady=5)
+        row += 1
         ttk.Checkbutton(
-            options_frame,
-            text="Dry Run (preview only, don't rename)",
-            variable=self.dry_run,
+            check_frame,
+            text="Include videos",
+            variable=self.include_videos,
+            command=self.toggle_video_settings,
         ).pack(side=tk.LEFT, padx=(0, 15))
         ttk.Checkbutton(
-            options_frame,
+            check_frame,
+            text="Dry Run (preview only, don't rename)",
+            variable=self.dry_run,
+        ).pack(side=tk.LEFT)
+        ttk.Checkbutton(
+            check_frame,
             text="Create backup of original files",
             variable=self.backup,
         ).pack(side=tk.LEFT)
+
+        self.progress = ttk.Progressbar(main_frame, mode='indeterminate')
+        self.progress.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
+        row += 1
 
         button_frame = ttk.Frame(main_frame)
         button_frame.grid(row=row, column=0, columnspan=3, pady=15)
@@ -962,24 +985,10 @@ class ImageSorterGUI:
         )
         self.open_folder_button.pack(side=tk.LEFT, padx=5)
 
-        self.install_file_explorer_button = ttk.Button(
-            button_frame,
-            text="Install in File Explorer",
-            command=self.install_in_file_explorer,
-        )
-        self.install_file_explorer_button.pack(side=tk.LEFT, padx=5)
-
-        self.progress = ttk.Progressbar(main_frame, mode='indeterminate')
-        self.progress.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
-        row += 1
-
-        log_frame = ttk.LabelFrame(main_frame, text="Log Output", padding="5")
-        log_frame.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
-        main_frame.rowconfigure(row, weight=1)
 
-        self.log_text = scrolledtext.ScrolledText(log_frame, height=15, wrap=tk.WORD)
+        self.log_text = scrolledtext.ScrolledText(log_frame, wrap=tk.WORD)
         self.log_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
         sys.stdout = TextRedirector(self.log_text, "stdout")
@@ -1321,13 +1330,6 @@ class ImageSorterGUI:
             subprocess.Popen(["open", folder])
         else:
             subprocess.Popen(["xdg-open", folder])
-
-    def install_in_file_explorer(self):
-        install_file_explorer()
-        messagebox.showinfo(
-            "File Explorer",
-            f"{APP_NAME} was installed in the File Explorer context menu.",
-        )
 
     def stop_sorting(self):
         self.stop_event.set()
