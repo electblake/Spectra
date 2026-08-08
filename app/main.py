@@ -66,6 +66,8 @@ def extract_video_frames_worker(connection) -> None:
                 VIDEO_OPEN_TIMEOUT_MS,
                 cv2.CAP_PROP_READ_TIMEOUT_MSEC,
                 VIDEO_READ_TIMEOUT_MS,
+                cv2.CAP_PROP_N_THREADS,
+                1,
             ],
         )
         frame_count = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -200,21 +202,29 @@ def calculate_visual_features(
     try:
         img = Image.open(image_path)
 
-        rgb_hist = extract_color_histogram(img, bins_per_channel=32)
-        hsv_hist = extract_hsv_histogram(img, bins_per_channel=16)
-        spatial_color = extract_spatial_color_features(img, grid_size=4)
-        texture = extract_texture_features(img)
-        brightness = extract_brightness_contrast(img)
-        aspect_ratio = extract_aspect_ratio(img)
+        weighted_features = []
+        if rgb_weight != 0:
+            weighted_features.append(
+                extract_color_histogram(img, bins_per_channel=32) * rgb_weight
+            )
+        if hsv_weight != 0:
+            weighted_features.append(
+                extract_hsv_histogram(img, bins_per_channel=16) * hsv_weight
+            )
+        if spatial_weight != 0:
+            weighted_features.append(
+                extract_spatial_color_features(img, grid_size=4) * spatial_weight
+            )
+        if texture_weight != 0:
+            weighted_features.append(extract_texture_features(img) * texture_weight)
+        if brightness_weight != 0:
+            weighted_features.append(
+                extract_brightness_contrast(img) * brightness_weight
+            )
+        if aspect_ratio_weight != 0:
+            weighted_features.append(extract_aspect_ratio(img) * aspect_ratio_weight)
 
-        features = np.concatenate([
-            rgb_hist * rgb_weight,
-            hsv_hist * hsv_weight,
-            spatial_color * spatial_weight,
-            texture * texture_weight,
-            brightness * brightness_weight,
-            aspect_ratio * aspect_ratio_weight,
-        ])
+        features = np.concatenate(weighted_features)
 
         norm = np.linalg.norm(features)
         if norm > 0:
