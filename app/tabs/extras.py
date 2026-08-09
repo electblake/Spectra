@@ -94,6 +94,7 @@ def install():
     for root, target_arg in MENU_CONTEXTS:
         menu_key = _menu_key(root)
         command_value = _command_value(launcher_command, target_arg)
+        print(f"File Explorer command ({root}): {command_value}")
         with winreg.CreateKeyEx(
             winreg.HKEY_CURRENT_USER,
             menu_key,
