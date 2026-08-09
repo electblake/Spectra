@@ -45,10 +45,18 @@ from app.tabs import extras
 
 __version__ = APP_VERSION
 
+APP_ICON_FILENAME = "Spectra.ico"
 VIDEO_GRABS_FOLDER = ".spectra_video_grabs"
 VIDEO_OPEN_TIMEOUT_MS = 10_000
 VIDEO_READ_TIMEOUT_MS = 10_000
 VIDEO_FRAME_PROCESS_TIMEOUT_SECONDS = 25
+
+
+def app_icon_path() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS) / APP_ICON_FILENAME
+
+    return Path(__file__).parent.parent / APP_ICON_FILENAME
 
 
 def extract_video_frames_worker(connection) -> None:
@@ -675,6 +683,7 @@ class ImageSorterGUI:
     def __init__(self, root):
         self.root = root
         self.root.title(f"{APP_NAME} v{__version__} - {APP_DESCRIPTION}")
+        self.root.iconbitmap(app_icon_path())
         self.root.geometry("1440x960")
         self.root.resizable(True, True)
 

@@ -89,7 +89,7 @@ def install():
     import winreg
 
     launcher_command = _launcher_command()
-    launcher_icon = launcher_command[0]
+    launcher_icon = f"{_quote(launcher_command[0])},0"
 
     for root, target_arg in MENU_CONTEXTS:
         menu_key = _menu_key(root)

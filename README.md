@@ -1,5 +1,5 @@
 <center>
-<img src="Spectra-cropped.png" alt="Spectra" width="350">
+<img src="Spectra.png" alt="Spectra" width="350">
 <h3>Intelligent image/video sorting by visual similarity</h3>
 <p>Spectra automatically organizes your image collections by analyzing color, texture, and content similarity. Say goodbye to chaotic folders — let your images flow in visual harmony.</p>
 </center>
