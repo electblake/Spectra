@@ -6,7 +6,7 @@
 
 
 <p align="center">
-  <img src="https://img.shields.io/badge/python-3.8+-blue.svg" alt="Python Version">
+  <img src="https://img.shields.io/github/v/release/electblake/Spectra" alt="Latest release">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
   <img src="https://img.shields.io/badge/platform-Windows-lightgrey.svg" alt="Platform">
 </p>
@@ -27,44 +27,21 @@
 
 ## 🚀 Quick start
 
-### Option 1: Download pre-built binary (recommended). Currently only Windows build
+### Install Spectra on Windows (recommended)
 
-**No Python installation required!**
+No Python, PowerShell, or other development tools are required.
 
-1. Go to [Releases](https://github.com/xtzchad/Spectra/releases)
-2. Download the latest version
+1. Open the [latest Spectra release](https://github.com/electblake/Spectra/releases/latest).
+2. Download the file ending in `windows-amd64-Setup.exe`.
+3. Run the downloaded Setup executable.
+4. Review the license, choose whether to create a desktop shortcut, and select **Install**.
+5. Launch Spectra from the Start Menu, the optional desktop shortcut, or the final Setup page.
 
-### Option 2: Run from source
+Setup installs Spectra for the current Windows user and supports upgrades and uninstall through Windows **Installed apps**.
 
-**Prerequisites:**
-```bash
-Python 3.8 or higher
-```
+### Portable version
 
-1. **Clone the repository**
-   ```
-   git clone https://github.com/xtzchad/Spectra.git
-   cd Spectra
-   ```
-
-2. **Install dependencies**
-   ```
-   pip install -r requirements.txt
-   ```
-
-3. **Run Spectra**
-   ```
-   python -m app
-   ```
-
-### Dependencies
-
-```
-Pillow>=10.0.0
-numpy>=1.24.0
-scipy>=1.10.0
-scikit-learn>=1.3.0
-```
+For an installation-free copy, download the file ending in `windows-amd64-portable.zip` from the [latest release](https://github.com/electblake/Spectra/releases/latest), extract the entire archive, and run the Spectra executable inside the extracted folder.
 
 ---
 
@@ -114,10 +91,7 @@ Uses DBSCAN (Density-Based Spatial Clustering) to:
 
 ### Basic workflow
 
-1. **Launch the application**
-   ```bash
-   python -m app
-   ```
+1. **Launch Spectra** from the Start Menu or desktop shortcut.
 
 2. **Select your image folder**
    - Click "Browse..." to choose your image directory
@@ -134,33 +108,6 @@ Uses DBSCAN (Density-Based Spatial Clustering) to:
    - Click "Start Sorting"
    - Monitor progress in the log window
    - Review results and mapping file
-
-### Advanced options
-
-#### Custom similarity threshold
-
-```python
-# In code, adjust threshold parameter:
-sorted_images = sort_with_tight_clustering(
-    image_files,
-    similarity_threshold=0.015  # Lower = tighter clusters
-)
-```
-
-#### Programmatic usage
-
-```python
-from app.main import get_image_files, sort_with_tight_clustering, rename_images
-
-# Load images
-images = get_image_files("/path/to/images")
-
-# Sort by similarity
-sorted_images = sort_with_tight_clustering(images)
-
-# Rename (with backup)
-rename_images(sorted_images, prefix="sorted_", backup=True)
-```
 
 ---
 
@@ -221,85 +168,6 @@ Original Name,New Name
 
 ---
 
-## 🔧 Building from source
-
-### Creating standalone executables
-
-Want to compile your own binary? Here's how:
-
-#### Prerequisites
-
-```bash
-pip install pyinstaller
-```
-
-#### Windows
-
-```bash
-pyinstaller --onefile --windowed --name Spectra --icon=icon.ico app/__main__.py
-```
-
-The executable will be in `dist/Spectra.exe`
-
-#### macOS
-
-```bash
-pyinstaller --onefile --windowed --name Spectra --icon=icon.icns app/__main__.py
-```
-
-The app bundle will be in `dist/Spectra.app`
-
-#### Linux
-
-```bash
-pyinstaller --onefile --name Spectra app/__main__.py
-```
-
-The executable will be in `dist/Spectra`
-
-#### Advanced build options
-
-For a smaller executable with optimizations:
-
-```bash
-pyinstaller --onefile \
-            --windowed \
-            --name Spectra \
-            --strip \
-            --exclude-module matplotlib \
-            --exclude-module pytest \
-            app/__main__.py
-```
-
-**Build options explained:**
-- `--onefile`: Bundle everything into a single executable
-- `--windowed`: Hide console window (GUI only)
-- `--name`: Set output filename
-- `--icon`: Add custom icon (`.ico` for Windows, `.icns` for macOS)
-- `--strip`: Remove debug symbols (smaller size)
-- `--exclude-module`: Exclude unnecessary packages
-
-#### Troubleshooting builds
-
-**"Failed to execute script" error:**
-```bash
-# Build without --windowed to see error messages
-pyinstaller --onefile --name Spectra app/__main__.py
-```
-
-**Missing modules in compiled version:**
-```bash
-# Add hidden imports
-pyinstaller --onefile --hidden-import=PIL._tkinter_finder app/__main__.py
-```
-
-**Antivirus false positives:**
-- This is common with PyInstaller executables
-- Sign your executable with a code signing certificate
-- Or add your build folder to antivirus exclusions during development
-
----
-
 ## 🤝 Contributing
 
 Contributions are welcome!
@@ -322,9 +190,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Questions? Suggestions? Issues?**
 
-- 🐛 [Report a bug](https://github.com/xtzchad/Spectra/issues)
-- 💡 [Request a feature](https://github.com/xtzchad/Spectra/issues)
-- 📖 [Documentation](https://github.com/xtzchad/Spectra/wiki)
+- 🐛 [Report a bug](https://github.com/electblake/Spectra/issues)
+- 💡 [Request a feature](https://github.com/electblake/Spectra/issues)
+- 📖 [Documentation](https://github.com/electblake/Spectra/wiki)
 
 ---
 
