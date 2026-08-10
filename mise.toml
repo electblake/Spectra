@@ -12,3 +12,8 @@ env = { PYTHONPATH = "" }
 description = "Run Spectra from source"
 run = "uv run python -m app"
 env = { PYTHONPATH = "" }
+
+[tasks.test]
+description = "Run the Spectra test suite"
+run = "uv run pytest"
+env = { PYTHONPATH = "" }

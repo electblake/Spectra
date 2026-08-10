@@ -605,62 +605,67 @@ def rename_images(sorted_images: list[tuple[Path, np.ndarray]],
             print(f"✓ Original files backed up to: {backup_folder}")
 
 
-def rename_videos(sorted_images: list[tuple[Path, np.ndarray]],
-                  folder_path: str | Path,
-                  prefix: str = "",
-                  dry_run: bool = False,
-                  backup: bool = True,
-                  parse_dates: bool = False,
-                  date_pattern: str = DATE_PATTERN,
-                  separator: str = SEPARATOR,
-                  count_start: int = COUNT_START) -> None:
+def rename_media(sorted_images: list[tuple[Path, np.ndarray]],
+                 folder_path: str | Path,
+                 prefix: str = "",
+                 dry_run: bool = False,
+                 backup: bool = True,
+                 parse_dates: bool = False,
+                 date_pattern: str = DATE_PATTERN,
+                 separator: str = SEPARATOR,
+                 count_start: int = COUNT_START) -> None:
     folder = Path(folder_path)
-    video_files = [folder / image_path.stem for image_path, _ in sorted_images]
+    media_files = [
+        folder / image_path.stem
+        if image_path.parent.name == VIDEO_GRABS_FOLDER
+        else image_path
+        for image_path, _ in sorted_images
+    ]
 
     backup_folder = folder / "backup_originals"
     if backup and not dry_run:
         backup_folder.mkdir(exist_ok=True)
         print(f"\nCreating backup in: {backup_folder}")
 
-    padding = len(str(count_start + len(video_files) - 1))
+    padding = len(str(count_start + len(media_files) - 1))
     temp_names = []
     temp_run_id = uuid.uuid4().hex
 
-    print(f"\n{'DRY RUN - ' if dry_run else ''}Renaming videos...")
+    print(f"\n{'DRY RUN - ' if dry_run else ''}Renaming media...")
 
-    for i, video_path in enumerate(video_files, 1):
+    for i, media_path in enumerate(media_files, 1):
         temp_name = (
             folder
-            / f"__temp_video_{temp_run_id}_{i:0{padding}d}{video_path.suffix}"
+            / f"__temp_media_{temp_run_id}_{i:0{padding}d}{media_path.suffix}"
         )
 
         if not dry_run:
             if backup:
-                shutil.copy2(video_path, backup_folder / video_path.name)
-            video_path.rename(temp_name)
+                shutil.copy2(media_path, backup_folder / media_path.name)
+            media_path.rename(temp_name)
 
         temp_names.append(temp_name)
 
     final_mapping = []
-    for i, (video_path, temp_path) in enumerate(zip(video_files, temp_names), 1):
-        date_match = re.search(date_pattern, video_path.name) if parse_dates else None
+    for i, (media_path, temp_path) in enumerate(zip(media_files, temp_names), 1):
+        date_match = re.search(date_pattern, media_path.name) if parse_dates else None
         date = date_match.group() if date_match else ""
         count = count_start + i - 1
         if date:
             new_name = (
-                f"{prefix}{count:0{padding}d}{separator}{date}{video_path.suffix}"
+                f"{prefix}{count:0{padding}d}{separator}{date}{media_path.suffix}"
             )
         else:
-            new_name = f"{prefix}{count:0{padding}d}{video_path.suffix}"
+            new_name = f"{prefix}{count:0{padding}d}{media_path.suffix}"
         final_path = folder / new_name
 
         if not dry_run:
             temp_path.rename(final_path)
 
-        final_mapping.append((video_path.name, new_name))
+        final_mapping.append((media_path.name, new_name))
 
         if i <= 5 or i > len(temp_names) - 5:
-            print(f"  {video_path.name} → {new_name}")
+            print(f"  {media_path.name} → {new_name}")
         elif i == 6:
             print(f"  ... ({len(temp_names) - 10} more) ...")
 
@@ -674,7 +679,7 @@ def rename_videos(sorted_images: list[tuple[Path, np.ndarray]],
     if dry_run:
         print("\n*** DRY RUN COMPLETE - No files were modified ***")
     else:
-        print(f"\n✓ Successfully renamed {len(video_files)} videos!")
+        print(f"\n✓ Successfully renamed {len(media_files)} media files!")
         if backup:
             print(f"✓ Original files backed up to: {backup_folder}")
 
@@ -1232,23 +1237,19 @@ class ImageSorterGUI:
         include_videos,
     ):
         try:
-            image_files = (
+            image_files = get_image_files(folder)
+            video_image_files = (
                 get_video_image_files(folder, self.stop_event, video_frame_percentage)
                 if include_videos
                 else []
             )
 
             if self.stop_event.is_set():
-                if image_files:
-                    cleanup_video_grabs(folder)
                 self.log("\nSorting stopped.")
                 self.on_complete(False)
                 return
 
-            processing_videos = bool(image_files)
-
-            if not processing_videos:
-                image_files = get_image_files(folder)
+            image_files.extend(video_image_files)
 
             if not image_files:
                 self.log("\nError: No image files found!")
@@ -1261,18 +1262,8 @@ class ImageSorterGUI:
                 feature_weights,
             )
 
-            if processing_videos:
-                rename_images(
-                    sorted_images,
-                    prefix=self.prefix.get(),
-                    dry_run=self.dry_run.get(),
-                    backup=False,
-                    parse_dates=self.parse_dates.get(),
-                    date_pattern=self.date_pattern.get(),
-                    separator=self.separator.get(),
-                    count_start=self.count_start.get(),
-                )
-                rename_videos(
+            if video_image_files:
+                rename_media(
                     sorted_images,
                     folder,
                     prefix=self.prefix.get(),
