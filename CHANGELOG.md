@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-08-10
+
+### Added
+
+- Added an integration test and `mise test` task for mixed image and video sorting.
+
+### Changed
+
+- Unified images and videos into one sorting and renaming sequence.
+
 ## [0.4.4] - 2026-08-09
 
 ### Added
@@ -111,7 +121,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made `pyproject.toml` the sole source of the application version.
 - Refined application metadata, typing, formatting, and documentation.
 
-[Unreleased]: https://github.com/electblake/Spectra/compare/v0.4.4...HEAD
+[Unreleased]: https://github.com/electblake/Spectra/compare/v0.4.5...HEAD
+[0.4.5]: https://github.com/electblake/Spectra/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/electblake/Spectra/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/electblake/Spectra/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/electblake/Spectra/compare/v0.4.1...v0.4.2
