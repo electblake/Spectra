@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-10
+
+### Added
+
+- Added a Windows Setup executable for per-user installation, upgrades, and uninstall.
+- Added Start Menu integration, an optional desktop shortcut, and post-install launch.
+
+### Changed
+
+- Changed the portable Windows build to a self-contained application bundle.
+- Included the license in packaged application bundles and Setup.
+
 ## [0.4.5] - 2026-08-10
 
 ### Added
@@ -121,7 +133,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made `pyproject.toml` the sole source of the application version.
 - Refined application metadata, typing, formatting, and documentation.
 
-[Unreleased]: https://github.com/electblake/Spectra/compare/v0.4.5...HEAD
+[Unreleased]: https://github.com/electblake/Spectra/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/electblake/Spectra/compare/v0.4.5...v0.5.0
 [0.4.5]: https://github.com/electblake/Spectra/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/electblake/Spectra/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/electblake/Spectra/compare/v0.4.2...v0.4.3

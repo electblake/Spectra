@@ -4,8 +4,14 @@ python = "3.12"
 uv = "latest"
 
 [tasks.build]
-description = "Compile Spectra as a standalone executable"
+description = "Compile Spectra as a standalone application bundle"
 run = "uv run --isolated pyinstaller --noconfirm --clean Spectra.spec"
+env = { PYTHONPATH = "" }
+
+[tasks.build-setup]
+description = "Compile the Spectra Windows setup executable"
+depends = ["build"]
+run = "pwsh -NoProfile -File packaging/build-setup.ps1"
 env = { PYTHONPATH = "" }
 
 [tasks.run]
