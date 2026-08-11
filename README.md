@@ -41,6 +41,8 @@ No Python, PowerShell, or other development tools are required.
 
 Setup installs Spectra for the current Windows user and supports upgrades and uninstall through Windows **Installed apps**.
 
+After installation, use **Extras > Install > Check for Updates** to download and open the latest GitHub release Setup executable.
+
 ### Portable version
 
 For an installation-free copy, download the file ending in `windows-amd64-portable.zip` from the [latest release](https://github.com/electblake/Spectra/releases/latest), extract the entire archive, and run the Spectra executable inside the extracted folder.
