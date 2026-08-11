@@ -24,6 +24,7 @@
 - **🛡️ Safe operations**: Dry-run mode and automatic backups protect your files
 - **📊 Detailed logging**: Real-time progress tracking and CSV mapping of all changes
 - **⚙️ Customizable**: Adjustable similarity thresholds and filename prefixes
+- **📂 Fast handoff**: Open the sorted folder and quit Spectra in one action
 
 ---
 

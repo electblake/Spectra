@@ -1342,6 +1342,11 @@ class ImageSorterGUI:
         ).pack(side=tk.LEFT, padx=5)
         ttk.Button(
             button_frame,
+            text="Open Folder and Quit",
+            command=self.open_input_folder_and_quit,
+        ).pack(side=tk.LEFT, padx=5)
+        ttk.Button(
+            button_frame,
             text="Close",
             command=dialog.destroy,
         ).pack(side=tk.LEFT, padx=5)
@@ -1364,6 +1369,10 @@ class ImageSorterGUI:
             subprocess.Popen(["open", folder])
         else:
             subprocess.Popen(["xdg-open", folder])
+
+    def open_input_folder_and_quit(self):
+        self.open_input_folder()
+        self.root.destroy()
 
     def stop_sorting(self):
         self.stop_event.set()
