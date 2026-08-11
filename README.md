@@ -11,6 +11,8 @@
   <img src="https://img.shields.io/badge/platform-Windows-lightgrey.svg" alt="Platform">
 </p>
 
+![Spectra application demo](demo.png)
+
 ---
 
 ## ✨ Features

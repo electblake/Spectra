@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added an Extras > Install update checker that downloads and opens a newer GitHub release Setup.
+- Added a link from Extras > Install to the project releases page.
+
 ## [0.5.1] - 2026-08-10
 
 ### Changed
