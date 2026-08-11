@@ -23,7 +23,9 @@
 - **🖥️ User-friendly GUI**: Clean Tkinter interface—no command line needed
 - **🛡️ Safe operations**: Dry-run mode and automatic backups protect your files
 - **📊 Detailed logging**: Real-time progress tracking and CSV mapping of all changes
+- **⏱️ Live progress**: Stage-by-stage status, item counts, and completion percentage
 - **⚙️ Customizable**: Adjustable similarity thresholds and filename prefixes
+- **💡 Guided controls**: Clear similarity-weight descriptions and date-pattern examples
 - **📂 Fast handoff**: Open the sorted folder and quit Spectra in one action
 
 ---
@@ -99,7 +101,7 @@ Uses DBSCAN (Density-Based Spatial Clustering) to:
 1. **Launch Spectra** from the Start Menu or desktop shortcut.
 
 2. **Select your image folder**
-   - Click "Browse..." to choose your image directory
+   - Click "Browse" to choose your image directory
    - Supported formats: JPG, JPEG, PNG, BMP, GIF, TIFF, WEBP
 
 3. **Configure settings**

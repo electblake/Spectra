@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-08-10
+
+### Added
+
+- Added determinate progress and status reporting throughout sorting and renaming.
+- Added date-pattern examples, folder-opening shortcuts, and descriptions for similarity weights.
+
+### Changed
+
+- Reorganized runtime controls and clarified option labels in the sorting interface.
+
 ## [0.5.3] - 2026-08-10
 
 ### Added
@@ -154,7 +165,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made `pyproject.toml` the sole source of the application version.
 - Refined application metadata, typing, formatting, and documentation.
 
-[Unreleased]: https://github.com/electblake/Spectra/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/electblake/Spectra/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/electblake/Spectra/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/electblake/Spectra/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/electblake/Spectra/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/electblake/Spectra/compare/v0.5.0...v0.5.1

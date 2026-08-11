@@ -316,8 +316,7 @@ def get_video_image_files(
                 f"  Warning: Skipping invalid Unicode filename: "
                 f"{video_file_path.name!a}"
             )
-            if i % 10 == 0 or i == len(video_files):
-                print(f"  Extracted {i}/{len(video_files)}")
+            print(f"Extracting video frames {i}/{len(video_files)}")
             continue
 
         image_file_path = video_grabs_folder / f"{video_file_path.name}.png"
@@ -343,8 +342,7 @@ def get_video_image_files(
                 f"frame extraction timed out after "
                 f"{VIDEO_FRAME_PROCESS_TIMEOUT_SECONDS} seconds"
             )
-            if i % 10 == 0 or i == len(video_files):
-                print(f"  Extracted {i}/{len(video_files)}")
+            print(f"Extracting video frames {i}/{len(video_files)}")
             continue
 
         if not frame_valid:
@@ -355,8 +353,7 @@ def get_video_image_files(
         else:
             image_files.append(image_file_path)
 
-        if i % 10 == 0 or i == len(video_files):
-            print(f"  Extracted {i}/{len(video_files)}")
+        print(f"Extracting video frames {i}/{len(video_files)}")
 
     parent_connection.send(None)
     video_process.join()
@@ -411,10 +408,9 @@ def sort_with_tight_clustering(
             feat = calculate_visual_features(str(img_path), feature_weights)
             images_with_features.append((img_path, feat))
             features.append(feat)
-            if i % 10 == 0 or i == len(image_files):
-                print(f"  Processed {i}/{len(image_files)}")
         except Exception as e:  # noqa: BLE001
             print(f"  Warning: Skipping {img_path.name}: {e}")
+        print(f"Processing visual features {i}/{len(image_files)}")
 
     if not images_with_features:
         raise ValueError("No valid images found")
@@ -423,10 +419,11 @@ def sort_with_tight_clustering(
     n_images = len(features)
 
     print(f"\nCalculating visual similarity between {n_images} images...")
+    print("Calculating visual similarity 0/1")
 
     distance_matrix = cdist(features, features, metric='euclidean')
 
-    print("  Distance matrix computed")
+    print("Calculating visual similarity 1/1")
 
     if similarity_threshold is None:
         nn_distances = []
@@ -437,6 +434,7 @@ def sort_with_tight_clustering(
         similarity_threshold = float(np.percentile(nn_distances, 70))
 
     print(f"\nClustering with DBSCAN (eps={similarity_threshold:.4f})...")
+    print("Clustering images 0/1")
 
     clustering = DBSCAN(
         eps=similarity_threshold, # type: ignore
@@ -445,6 +443,7 @@ def sort_with_tight_clustering(
     )
 
     cluster_labels = clustering.fit_predict(distance_matrix)
+    print("Clustering images 1/1")
 
     clusters = {}
     for idx, label in enumerate(cluster_labels):
@@ -459,11 +458,12 @@ def sort_with_tight_clustering(
     print("\nSorting images within each cluster...")
     sorted_clusters = {}
 
-    for label, cluster_items in clusters.items():
+    for cluster_number, (label, cluster_items) in enumerate(clusters.items(), 1):
         cluster_indices = [idx for idx, _ in cluster_items]
         cluster_feats = features[cluster_indices]
         sorted_items = sort_cluster_internally(cluster_feats, cluster_items)
         sorted_clusters[label] = sorted_items
+        print(f"Sorting clusters {cluster_number}/{len(clusters)}")
 
     print("  All clusters sorted internally")
 
@@ -480,6 +480,7 @@ def sort_with_tight_clustering(
 
     if n_clusters == 1:
         ordered_labels = cluster_labels_list
+        print("Ordering clusters 1/1")
     else:
         centroid_matrix = np.array([cluster_representatives[label] for label in cluster_labels_list])
         centroid_distances = cdist(centroid_matrix, centroid_matrix, metric='euclidean')
@@ -487,6 +488,7 @@ def sort_with_tight_clustering(
         visited = [False] * n_clusters
         ordered_labels = [cluster_labels_list[0]]
         visited[0] = True
+        print(f"Ordering clusters 1/{n_clusters}")
 
         for _ in range(n_clusters - 1):
             current_idx = cluster_labels_list.index(ordered_labels[-1])
@@ -501,8 +503,7 @@ def sort_with_tight_clustering(
             if next_idx != -1:
                 ordered_labels.append(cluster_labels_list[next_idx])
                 visited[next_idx] = True
-
-        print(f"  Ordered {len(ordered_labels)} clusters")
+                print(f"Ordering clusters {len(ordered_labels)}/{n_clusters}")
 
     print("\nAssembling final sequence...")
     sorted_images = []
@@ -523,6 +524,7 @@ def sort_with_tight_clustering(
 
         for item in cluster_items:
             sorted_images.append(item[1])
+        print(f"Assembling final sequence {cluster_idx + 1}/{len(ordered_labels)}")
 
     print(f"  Final sequence: {len(sorted_images)} images")
 
@@ -562,6 +564,7 @@ def rename_images(sorted_images: list[tuple[Path, np.ndarray]],
 
         temp_names.append(temp_name)
         mapping.append((img_path.name, temp_name.name))
+        print(f"Preparing images {i}/{len(sorted_images)}")
 
     final_mapping = []
     printed_parsed_date = False
@@ -584,6 +587,7 @@ def rename_images(sorted_images: list[tuple[Path, np.ndarray]],
             temp_path.rename(final_path)
 
         final_mapping.append((original_name, new_name))
+        print(f"Renaming images {i}/{len(temp_names)}")
 
         if i <= 5 or i > len(temp_names) - 5:
             print(f"  {original_name} → {new_name}")
@@ -645,6 +649,7 @@ def rename_media(sorted_images: list[tuple[Path, np.ndarray]],
             media_path.rename(temp_name)
 
         temp_names.append(temp_name)
+        print(f"Preparing media {i}/{len(media_files)}")
 
     final_mapping = []
     for i, (media_path, temp_path) in enumerate(zip(media_files, temp_names), 1):
@@ -663,6 +668,7 @@ def rename_media(sorted_images: list[tuple[Path, np.ndarray]],
             temp_path.rename(final_path)
 
         final_mapping.append((media_path.name, new_name))
+        print(f"Renaming media {i}/{len(temp_names)}")
 
         if i <= 5 or i > len(temp_names) - 5:
             print(f"  {media_path.name} → {new_name}")
@@ -712,6 +718,7 @@ class ImageSorterGUI:
         self.include_videos = tk.BooleanVar(value=user_settings["include_videos"])
         self.parse_dates = tk.BooleanVar(value=user_settings["parse_dates"])
         self.date_pattern = tk.StringVar(value=user_settings["date_pattern"])
+        self.date_pattern_preview = tk.StringVar()
         self.separator = tk.StringVar(value=user_settings["separator"])
         self.count_start = tk.IntVar(value=user_settings["count_start"])
         self.is_processing = False
@@ -725,6 +732,87 @@ class ImageSorterGUI:
 
         self.main_panes = ttk.Panedwindow(self.root, orient=tk.HORIZONTAL)
         self.main_panes.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        runtime_frame = ttk.Frame(self.root, padding=(10, 6, 10, 0))
+        runtime_frame.grid(row=1, column=0, sticky=(tk.W, tk.E))
+        runtime_frame.columnconfigure(0, weight=1)
+
+        check_frame = ttk.Frame(runtime_frame)
+        check_frame.grid(row=0, column=0, pady=(0, 6))
+        ttk.Checkbutton(
+            check_frame,
+            text="Include videos",
+            variable=self.include_videos,
+            command=self.toggle_video_settings,
+        ).pack(side=tk.LEFT, padx=(0, 15))
+        ttk.Checkbutton(
+            check_frame,
+            text="Dry Run (preview only, don't rename)",
+            variable=self.dry_run,
+        ).pack(side=tk.LEFT, padx=(0, 15))
+        ttk.Checkbutton(
+            check_frame,
+            text="Create backup of original files",
+            variable=self.backup,
+        ).pack(side=tk.LEFT)
+
+        button_frame = ttk.Frame(runtime_frame)
+        button_frame.grid(row=1, column=0)
+
+        self.start_button = ttk.Button(
+            button_frame,
+            text="Start Sorting",
+            command=self.start_sorting,
+        )
+        self.start_button.pack(side=tk.LEFT, padx=5)
+
+        self.stop_button = ttk.Button(
+            button_frame,
+            text="Stop",
+            command=self.stop_sorting,
+            state=tk.DISABLED,
+        )
+        self.stop_button.pack(side=tk.LEFT, padx=5)
+
+        self.save_settings_button = ttk.Button(
+            button_frame,
+            text="Save Settings",
+            command=self.save_settings,
+        )
+        self.save_settings_button.pack(side=tk.LEFT, padx=5)
+
+        self.defaults_button = ttk.Button(
+            button_frame,
+            text="Reset Default",
+            command=self.restore_default_settings,
+        )
+        self.defaults_button.pack(side=tk.LEFT, padx=5)
+
+        self.open_folder_button = ttk.Button(
+            button_frame,
+            text="Open Folder",
+            command=self.open_input_folder,
+        )
+        self.open_folder_button.pack(side=tk.LEFT, padx=5)
+
+        status_frame = ttk.Frame(self.root, padding=(10, 6))
+        status_frame.grid(row=2, column=0, sticky=(tk.W, tk.E))
+        status_frame.columnconfigure(1, weight=1)
+
+        self.status_text = tk.StringVar(value="Ready 0/0")
+        self.progress_percent_text = tk.StringVar(value="0%")
+        ttk.Label(status_frame, textvariable=self.status_text).grid(
+            row=0, column=0, sticky=tk.W, padx=(0, 10)
+        )
+        self.progress = ttk.Progressbar(
+            status_frame,
+            mode="determinate",
+            maximum=100,
+        )
+        self.progress.grid(row=0, column=1, sticky=(tk.W, tk.E))
+        ttk.Label(status_frame, textvariable=self.progress_percent_text).grid(
+            row=0, column=2, sticky=tk.E, padx=(10, 0)
+        )
 
         controls_pane = ttk.Frame(self.main_panes)
         log_frame = ttk.Frame(self.main_panes, padding="5")
@@ -777,8 +865,18 @@ class ImageSorterGUI:
         ttk.Label(main_frame, text="Media Folder:").grid(row=row, column=0, sticky=tk.W, pady=5)
         folder_entry = ttk.Entry(main_frame, textvariable=self.folder_path, width=50)
         folder_entry.grid(row=row, column=1, sticky=(tk.W, tk.E), padx=5)
-        ttk.Button(main_frame, text="Browse...", command=self.browse_folder).grid(
-            row=row, column=2, padx=5
+        folder_button_frame = ttk.Frame(main_frame)
+        folder_button_frame.grid(row=row, column=2, padx=5)
+        ttk.Button(folder_button_frame, text="Browse", command=self.browse_folder).pack(
+            side=tk.LEFT
+        )
+        ttk.Button(
+            folder_button_frame,
+            text="Open",
+            command=self.open_input_folder,
+        ).pack(
+            side=tk.LEFT,
+            padx=(5, 0),
         )
         row += 1
 
@@ -819,7 +917,7 @@ class ImageSorterGUI:
 
         renaming_row = 0
 
-        ttk.Label(renaming_frame, text="File Prefix:").grid(
+        ttk.Label(renaming_frame, text="Prefix:").grid(
             row=renaming_row, column=0, sticky=tk.W, pady=5
         )
         ttk.Entry(renaming_frame, textvariable=self.prefix, width=40).grid(
@@ -830,7 +928,7 @@ class ImageSorterGUI:
         )
         renaming_row += 1
 
-        ttk.Label(renaming_frame, text="Count start:").grid(
+        ttk.Label(renaming_frame, text="Start counting at:").grid(
             row=renaming_row, column=0, sticky=tk.W, pady=5
         )
         ttk.Entry(
@@ -845,7 +943,7 @@ class ImageSorterGUI:
 
         ttk.Checkbutton(
             renaming_frame,
-            text="Parse dates",
+            text="Parse file dates",
             variable=self.parse_dates,
             command=self.toggle_date_pattern,
         ).grid(row=renaming_row, column=0, columnspan=3, sticky=tk.W, pady=5)
@@ -869,6 +967,34 @@ class ImageSorterGUI:
             renaming_frame,
             text="(e.g., matches 2025-01-31 or 2025.01.31)",
         ).grid(row=renaming_row, column=2, sticky=tk.W)
+        renaming_row += 1
+
+        self.date_pattern_button = ttk.Button(
+            renaming_frame,
+            text="Update examples",
+            command=self.update_date_pattern_examples,
+        )
+        self.date_pattern_button.grid(
+            row=renaming_row,
+            column=1,
+            sticky=tk.W,
+            padx=5,
+            pady=(0, 5),
+        )
+        renaming_row += 1
+
+        ttk.Label(
+            renaming_frame,
+            textvariable=self.date_pattern_preview,
+            justify=tk.LEFT,
+        ).grid(
+            row=renaming_row,
+            column=0,
+            columnspan=3,
+            sticky=tk.W,
+            pady=(0, 5),
+        )
+        self.update_date_pattern_examples()
         self.toggle_date_pattern()
         renaming_row += 1
 
@@ -891,36 +1017,90 @@ class ImageSorterGUI:
             weights_frame, from_=0.0, to=3.0, resolution=0.1,
             orient=tk.HORIZONTAL, variable=self.rgb_weight
         ).grid(row=0, column=1, sticky=(tk.W, tk.E))
+        ttk.Label(
+            weights_frame,
+            text=(
+                "Compares the overall red, green, and blue color mix. "
+                "Higher values prioritize matching exact colors; lower values reduce color's influence."
+            ),
+            font=('Arial', 8),
+            wraplength=600,
+        ).grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
 
-        ttk.Label(weights_frame, text="HSV histogram:").grid(row=1, column=0, sticky=tk.W)
+        ttk.Label(weights_frame, text="HSV histogram:").grid(row=2, column=0, sticky=tk.W)
         tk.Scale(
             weights_frame, from_=0.0, to=3.0, resolution=0.1,
             orient=tk.HORIZONTAL, variable=self.hsv_weight
-        ).grid(row=1, column=1, sticky=(tk.W, tk.E))
+        ).grid(row=2, column=1, sticky=(tk.W, tk.E))
+        ttk.Label(
+            weights_frame,
+            text=(
+                "Compares hue, saturation, and color brightness. "
+                "Higher values prioritize similar perceived colors and intensity; lower values reduce their influence."
+            ),
+            font=('Arial', 8),
+            wraplength=600,
+        ).grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
 
-        ttk.Label(weights_frame, text="Spatial color:").grid(row=2, column=0, sticky=tk.W)
+        ttk.Label(weights_frame, text="Spatial color:").grid(row=4, column=0, sticky=tk.W)
         tk.Scale(
             weights_frame, from_=0.0, to=3.0, resolution=0.1,
             orient=tk.HORIZONTAL, variable=self.spatial_weight
-        ).grid(row=2, column=1, sticky=(tk.W, tk.E))
+        ).grid(row=4, column=1, sticky=(tk.W, tk.E))
+        ttk.Label(
+            weights_frame,
+            text=(
+                "Compares where colors appear within the image. "
+                "Higher values favor similar color layouts; lower values allow colors to appear in different places."
+            ),
+            font=('Arial', 8),
+            wraplength=600,
+        ).grid(row=5, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
 
-        ttk.Label(weights_frame, text="Texture:").grid(row=3, column=0, sticky=tk.W)
+        ttk.Label(weights_frame, text="Texture:").grid(row=6, column=0, sticky=tk.W)
         tk.Scale(
             weights_frame, from_=0.0, to=3.0, resolution=0.1,
             orient=tk.HORIZONTAL, variable=self.texture_weight
-        ).grid(row=3, column=1, sticky=(tk.W, tk.E))
+        ).grid(row=6, column=1, sticky=(tk.W, tk.E))
+        ttk.Label(
+            weights_frame,
+            text=(
+                "Compares edges, patterns, and variations in detail. "
+                "Higher values prioritize similar smoothness or complexity; lower values reduce texture's influence."
+            ),
+            font=('Arial', 8),
+            wraplength=600,
+        ).grid(row=7, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
 
-        ttk.Label(weights_frame, text="Brightness and contrast:").grid(row=4, column=0, sticky=tk.W)
+        ttk.Label(weights_frame, text="Brightness and contrast:").grid(row=8, column=0, sticky=tk.W)
         tk.Scale(
             weights_frame, from_=0.0, to=3.0, resolution=0.1,
             orient=tk.HORIZONTAL, variable=self.brightness_weight
-        ).grid(row=4, column=1, sticky=(tk.W, tk.E))
+        ).grid(row=8, column=1, sticky=(tk.W, tk.E))
+        ttk.Label(
+            weights_frame,
+            text=(
+                "Compares overall lightness, darkness, and tonal range. "
+                "Higher values favor similar lighting and contrast; lower values allow greater tonal differences."
+            ),
+            font=('Arial', 8),
+            wraplength=600,
+        ).grid(row=9, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
 
-        ttk.Label(weights_frame, text="Aspect ratio:").grid(row=5, column=0, sticky=tk.W)
+        ttk.Label(weights_frame, text="Aspect ratio:").grid(row=10, column=0, sticky=tk.W)
         tk.Scale(
             weights_frame, from_=0.0, to=3.0, resolution=0.05,
             orient=tk.HORIZONTAL, variable=self.aspect_ratio_weight
-        ).grid(row=5, column=1, sticky=(tk.W, tk.E))
+        ).grid(row=10, column=1, sticky=(tk.W, tk.E))
+        ttk.Label(
+            weights_frame,
+            text=(
+                "Compares image proportions, such as portrait, square, or landscape. "
+                "Higher values favor similar shapes; lower values allow more varied proportions."
+            ),
+            font=('Arial', 8),
+            wraplength=600,
+        ).grid(row=11, column=0, columnspan=2, sticky=tk.W)
 
         videos_frame = ttk.LabelFrame(main_frame, text="Video", padding="10")
         videos_frame.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
@@ -937,76 +1117,19 @@ class ImageSorterGUI:
         self.video_frame_scale.grid(row=0, column=1, sticky=(tk.W, tk.E))
         self.toggle_video_settings()
 
-        options_frame = ttk.Frame(main_frame)
-        options_frame.grid(row=row, column=0, columnspan=3, pady=5)
-        row += 1
-
-        check_frame = ttk.Frame(main_frame)
-        check_frame.grid(row=row, column=0, columnspan=3, pady=5)
-        row += 1
-        ttk.Checkbutton(
-            check_frame,
-            text="Include videos",
-            variable=self.include_videos,
-            command=self.toggle_video_settings,
-        ).pack(side=tk.LEFT, padx=(0, 15))
-        ttk.Checkbutton(
-            check_frame,
-            text="Dry Run (preview only, don't rename)",
-            variable=self.dry_run,
-        ).pack(side=tk.LEFT)
-        ttk.Checkbutton(
-            check_frame,
-            text="Create backup of original files",
-            variable=self.backup,
-        ).pack(side=tk.LEFT)
-
-        self.progress = ttk.Progressbar(main_frame, mode='indeterminate')
-        self.progress.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
-        row += 1
-
-        button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=row, column=0, columnspan=3, pady=15)
-        row += 1
-
-        self.start_button = ttk.Button(button_frame, text="Start Sorting",
-                                       command=self.start_sorting)
-        self.start_button.pack(side=tk.LEFT, padx=5)
-
-        self.stop_button = ttk.Button(button_frame, text="Stop",
-                                      command=self.stop_sorting,
-                                      state=tk.DISABLED)
-        self.stop_button.pack(side=tk.LEFT, padx=5)
-
-        self.save_settings_button = ttk.Button(
-            button_frame,
-            text="Save Settings",
-            command=self.save_settings,
-        )
-        self.save_settings_button.pack(side=tk.LEFT, padx=5)
-
-        self.defaults_button = ttk.Button(
-            button_frame,
-            text="Reset Default",
-            command=self.restore_default_settings,
-        )
-        self.defaults_button.pack(side=tk.LEFT, padx=5)
-
-        self.open_folder_button = ttk.Button(
-            button_frame,
-            text="Open Folder",
-            command=self.open_input_folder,
-        )
-        self.open_folder_button.pack(side=tk.LEFT, padx=5)
-
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
 
         self.log_text = scrolledtext.ScrolledText(log_frame, wrap=tk.WORD)
         self.log_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-        sys.stdout = TextRedirector(self.log_text, "stdout")
+        sys.stdout = TextRedirector(
+            self.log_text,
+            "stdout",
+            self.update_status_from_output,
+        )
 
+        self.log(f"{APP_NAME} v{__version__} loaded.")
         if self.loaded_settings_path is not None:
             self.log(f"Settings file loaded: {self.loaded_settings_path}")
         self.log_settings(
@@ -1060,8 +1183,30 @@ class ImageSorterGUI:
     def toggle_date_pattern(self):
         if self.parse_dates.get():
             self.date_pattern_entry.state(["!disabled"])
+            self.date_pattern_button.state(["!disabled"])
         else:
             self.date_pattern_entry.state(["disabled"])
+            self.date_pattern_button.state(["disabled"])
+
+    def update_date_pattern_examples(self):
+        sample_filenames = (
+            "IMG_2025-01-31.jpg",
+            "scan_2024.12.05.png",
+            "vacation_08-14-2023.jpeg",
+        )
+
+        try:
+            pattern = re.compile(self.date_pattern.get())
+        except re.error as error:
+            self.date_pattern_preview.set(f"Invalid regular expression: {error}")
+            return
+
+        preview_lines = []
+        for filename in sample_filenames:
+            match = pattern.search(filename)
+            parsed_value = match.group() if match else "No match"
+            preview_lines.append(f"{filename} → {parsed_value}")
+        self.date_pattern_preview.set("\n".join(preview_lines))
 
     def toggle_video_settings(self):
         if self.include_videos.get():
@@ -1121,6 +1266,7 @@ class ImageSorterGUI:
         self.prefix.set(FILE_PREFIX)
         self.toggle_threshold()
         self.toggle_date_pattern()
+        self.update_date_pattern_examples()
         self.toggle_video_settings()
         self.log_settings("\nSettings reset to defaults:")
 
@@ -1152,6 +1298,19 @@ class ImageSorterGUI:
 
     def log(self, message):
         print(message)
+
+    def update_status_from_output(self, text):
+        match = re.fullmatch(r"\s*(.+?)\s+(\d+)/(\d+)\s*", text)
+        if match is None:
+            return
+
+        process_name, current_text, total_text = match.groups()
+        current = int(current_text)
+        total = int(total_text)
+        percentage = round(current / total * 100)
+        self.status_text.set(f"{process_name} {current}/{total}")
+        self.progress.config(maximum=total, value=current)
+        self.progress_percent_text.set(f"{percentage}%")
 
     def start_sorting(self):
         folder = self.folder_path.get()
@@ -1198,7 +1357,9 @@ class ImageSorterGUI:
         self.stop_event.clear()
         self.start_button.config(state=tk.DISABLED)
         self.stop_button.config(state=tk.NORMAL)
-        self.progress.start()
+        self.status_text.set("Starting media sorting 0/1")
+        self.progress.config(maximum=1, value=0)
+        self.progress_percent_text.set("0%")
 
         self.log_text.delete(1.0, tk.END)
         self.log("="*60)
@@ -1299,12 +1460,14 @@ class ImageSorterGUI:
         self.root.after(0, lambda: self._on_complete_ui(success))
 
     def _on_complete_ui(self, success):
-        self.progress.stop()
         self.start_button.config(state=tk.NORMAL)
         self.stop_button.config(state=tk.DISABLED)
         self.is_processing = False
 
         if success:
+            self.status_text.set("Media sorting complete 1/1")
+            self.progress.config(maximum=1, value=1)
+            self.progress_percent_text.set("100%")
             if self.dry_run.get():
                 self.show_completion_dialog(
                     "Dry Run Complete",
@@ -1318,6 +1481,11 @@ class ImageSorterGUI:
                     "Media sorted and renamed successfully!\n"
                     "Check the log for details.",
                 )
+        else:
+            outcome = "stopped" if self.stop_event.is_set() else "failed"
+            self.status_text.set(f"Media sorting {outcome} 0/1")
+            self.progress.config(maximum=1, value=0)
+            self.progress_percent_text.set("0%")
 
     def show_completion_dialog(self, title, message):
         dialog = tk.Toplevel(self.root)
@@ -1381,9 +1549,10 @@ class ImageSorterGUI:
 
 
 class TextRedirector:
-    def __init__(self, widget, tag="stdout"):
+    def __init__(self, widget, tag, status_callback):
         self.widget = widget
         self.tag = tag
+        self.status_callback = status_callback
         self.text_queue = queue.Queue()
         self.widget.after(50, self.write_queued_text)
 
@@ -1392,7 +1561,9 @@ class TextRedirector:
 
     def write_queued_text(self):
         while not self.text_queue.empty():
-            self.widget.insert(tk.END, self.text_queue.get_nowait())
+            text = self.text_queue.get_nowait()
+            self.widget.insert(tk.END, text)
+            self.status_callback(text)
         self.widget.see(tk.END)
         self.widget.after(50, self.write_queued_text)
 
