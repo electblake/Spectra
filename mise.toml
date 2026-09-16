@@ -10,7 +10,6 @@ env = { PYTHONPATH = "" }
 
 [tasks.build-setup]
 description = "Compile the Spectra Windows setup executable"
-depends = ["build"]
 run = "pwsh -NoProfile -File packaging/build-setup.ps1"
 env = { PYTHONPATH = "" }
 

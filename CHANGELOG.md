@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-16
+
+### Changed
+
+- Install a private Python runtime and application dependencies with uv during Setup instead of bundling them into the installer.
+- Show dependency installation output in Setup and propagate its exit code.
+- Launch installed copies and existing Explorer integration through the private interpreter, with packaged version metadata and icons.
+- Remove the previous bundled runtime during upgrades and keep user settings outside the installation directory.
+- Setup requires an internet connection to download Python and application dependencies.
+
 ## [0.5.6] - 2026-09-16
 
 ### Changed

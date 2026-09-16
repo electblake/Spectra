@@ -197,16 +197,7 @@ def _launcher_command() -> list[str]:
     if getattr(sys, "frozen", False):
         return [str(Path(sys.executable).resolve())]
 
-    argv_launcher = Path(sys.argv[0])
-    if argv_launcher.exists() and argv_launcher.suffix.lower() in {".exe", ".bat", ".cmd"}:
-        return [str(argv_launcher.resolve())]
-
-    for command_name in (f"{APP_NAME.lower()}.exe", APP_NAME.lower()):
-        launcher = shutil.which(command_name)
-        if launcher:
-            return [str(Path(launcher).resolve())]
-
-    return [str(Path(sys.executable).resolve()), "-m", "app"]
+    return [str(Path(sys.executable).resolve()), "-I", "-m", "app"]
 
 
 def _menu_key(root: str):
@@ -233,7 +224,8 @@ def install():
     import winreg
 
     launcher_command = _launcher_command()
-    launcher_icon = f"{_quote(launcher_command[0])},0"
+    icon_root = Path(sys._MEIPASS) if getattr(sys, "frozen", False) else Path(__file__).resolve().parents[2]
+    launcher_icon = _quote(str(icon_root / "Spectra.ico"))
 
     for root, target_arg in MENU_CONTEXTS:
         menu_key = _menu_key(root)
