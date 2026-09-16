@@ -148,6 +148,23 @@ Original Name,New Name
 
 ## 🎛️ Configuration
 
+The **Settings** tab controls processing performance:
+
+- **Image feature workers:** concurrent image analysis threads, default **4**.
+- **PNG compression level:** temporary video frame compression from **0–9**, default **1**. Lower levels encode faster but produce larger files; pixels are unchanged.
+- **Image resize optimization:** **Default** keeps the original LANCZOS resize; **Low**, **Medium**, and **High** use Pillow `reducing_gap` values of **3.0**, **2.0**, and **1.0**. Higher optimization can be faster but may slightly change similarity scores and ordering. Analysis stays at 100×100 pixels and original files are unchanged.
+
+Changes apply to the next run. **Save Settings** persists these options, and **Restore Defaults** resets them. Video extraction still uses one process and one decoder thread.
+
+Existing `settings.ini` files require this section before launching the updated app:
+
+```ini
+[performance]
+feature_workers = 4
+png_compress_level = 1
+resize_optimization = Default
+```
+
 ### Similarity threshold guidelines
 
 | Threshold | Clustering behavior |

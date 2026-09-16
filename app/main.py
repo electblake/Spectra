@@ -10,6 +10,8 @@ import sys
 import threading
 import tkinter as tk
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
@@ -29,11 +31,15 @@ from app.config import (
     DATE_PATTERN,
     DEFAULT_FEATURE_WEIGHTS,
     DRY_RUN,
+    FEATURE_WORKERS,
     FILE_PREFIX,
     FOLDER_PATH,
     IMAGE_EXTENSIONS,
     INCLUDE_VIDEOS,
     PARSE_DATES,
+    PNG_COMPRESS_LEVEL,
+    RESIZE_OPTIMIZATION,
+    RESIZE_REDUCING_GAPS,
     SEPARATOR,
     SIMILARITY_THRESHOLD,
     VIDEO_EXTENSIONS,
@@ -41,7 +47,7 @@ from app.config import (
     read_user_settings,
     save_user_settings,
 )
-from app.tabs import extras
+from app.tabs import extras, settings
 
 __version__ = APP_VERSION
 
@@ -65,7 +71,7 @@ def extract_video_frames_worker(connection) -> None:
         if task is None:
             break
 
-        video_file_path, image_file_path, frame_percentage = task
+        video_file_path, image_file_path, frame_percentage, png_compress_level = task
         video = cv2.VideoCapture(
             video_file_path,
             cv2.CAP_FFMPEG,
@@ -87,15 +93,15 @@ def extract_video_frames_worker(connection) -> None:
         frame_valid = frame_read and frame is not None and frame.size > 0
         if frame_valid:
             image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-            image.save(image_file_path)
+            image.save(image_file_path, compress_level=png_compress_level)
 
         connection.send((frame_valid, frame_number))
 
     connection.close()
 
-def extract_color_histogram(img: Image.Image, bins_per_channel: int = 32) -> np.ndarray:
+def extract_color_histogram(img: Image.Image, bins_per_channel: int = 32, reducing_gap: float | None = None) -> np.ndarray:
     img_rgb = img.convert('RGB')
-    img_rgb = img_rgb.resize((100, 100), Image.Resampling.LANCZOS)
+    img_rgb = img_rgb.resize((100, 100), Image.Resampling.LANCZOS, reducing_gap=reducing_gap)
 
     img_array = np.array(img_rgb)
 
@@ -109,9 +115,9 @@ def extract_color_histogram(img: Image.Image, bins_per_channel: int = 32) -> np.
     return hist
 
 
-def extract_hsv_histogram(img: Image.Image, bins_per_channel: int = 16) -> np.ndarray:
+def extract_hsv_histogram(img: Image.Image, bins_per_channel: int = 16, reducing_gap: float | None = None) -> np.ndarray:
     img_hsv = img.convert('HSV')
-    img_hsv = img_hsv.resize((100, 100), Image.Resampling.LANCZOS)
+    img_hsv = img_hsv.resize((100, 100), Image.Resampling.LANCZOS, reducing_gap=reducing_gap)
 
     img_array = np.array(img_hsv)
 
@@ -125,9 +131,9 @@ def extract_hsv_histogram(img: Image.Image, bins_per_channel: int = 16) -> np.nd
     return hist
 
 
-def extract_spatial_color_features(img: Image.Image, grid_size: int = 4) -> np.ndarray:
+def extract_spatial_color_features(img: Image.Image, grid_size: int = 4, reducing_gap: float | None = None) -> np.ndarray:
     img_rgb = img.convert('RGB')
-    img_rgb = img_rgb.resize((100, 100), Image.Resampling.LANCZOS)
+    img_rgb = img_rgb.resize((100, 100), Image.Resampling.LANCZOS, reducing_gap=reducing_gap)
     img_array = np.array(img_rgb)
 
     h, w = img_array.shape[:2]
@@ -144,9 +150,9 @@ def extract_spatial_color_features(img: Image.Image, grid_size: int = 4) -> np.n
     return np.array(features) / 255.0
 
 
-def extract_texture_features(img: Image.Image) -> np.ndarray:
+def extract_texture_features(img: Image.Image, reducing_gap: float | None = None) -> np.ndarray:
     gray = img.convert('L')
-    gray = gray.resize((100, 100), Image.Resampling.LANCZOS)
+    gray = gray.resize((100, 100), Image.Resampling.LANCZOS, reducing_gap=reducing_gap)
     gray_array = np.array(gray, dtype=np.float32)
 
     grad_x = np.abs(np.diff(gray_array, axis=1))
@@ -173,9 +179,9 @@ def extract_texture_features(img: Image.Image) -> np.ndarray:
     return np.array(features) / 255.0
 
 
-def extract_brightness_contrast(img: Image.Image) -> np.ndarray:
+def extract_brightness_contrast(img: Image.Image, reducing_gap: float | None = None) -> np.ndarray:
     gray = img.convert('L')
-    gray = gray.resize((100, 100), Image.Resampling.LANCZOS)
+    gray = gray.resize((100, 100), Image.Resampling.LANCZOS, reducing_gap=reducing_gap)
     gray_array = np.array(gray, dtype=np.float32)
 
     features = [
@@ -197,6 +203,7 @@ def extract_aspect_ratio(img: Image.Image) -> np.ndarray:
 def calculate_visual_features(
     image_path: str,
     feature_weights: tuple[float, float, float, float, float, float] = DEFAULT_FEATURE_WEIGHTS,
+    reducing_gap: float | None = None,
 ) -> np.ndarray:
     (
         rgb_weight,
@@ -213,21 +220,21 @@ def calculate_visual_features(
         weighted_features = []
         if rgb_weight != 0:
             weighted_features.append(
-                extract_color_histogram(img, bins_per_channel=32) * rgb_weight
+                extract_color_histogram(img, bins_per_channel=32, reducing_gap=reducing_gap) * rgb_weight
             )
         if hsv_weight != 0:
             weighted_features.append(
-                extract_hsv_histogram(img, bins_per_channel=16) * hsv_weight
+                extract_hsv_histogram(img, bins_per_channel=16, reducing_gap=reducing_gap) * hsv_weight
             )
         if spatial_weight != 0:
             weighted_features.append(
-                extract_spatial_color_features(img, grid_size=4) * spatial_weight
+                extract_spatial_color_features(img, grid_size=4, reducing_gap=reducing_gap) * spatial_weight
             )
         if texture_weight != 0:
-            weighted_features.append(extract_texture_features(img) * texture_weight)
+            weighted_features.append(extract_texture_features(img, reducing_gap=reducing_gap) * texture_weight)
         if brightness_weight != 0:
             weighted_features.append(
-                extract_brightness_contrast(img) * brightness_weight
+                extract_brightness_contrast(img, reducing_gap=reducing_gap) * brightness_weight
             )
         if aspect_ratio_weight != 0:
             weighted_features.append(extract_aspect_ratio(img) * aspect_ratio_weight)
@@ -268,6 +275,7 @@ def get_video_image_files(
     folder_path: str | Path,
     stop_event: threading.Event,
     frame_percentage: int = VIDEO_FRAME_PERCENTAGE,
+    png_compress_level: int = PNG_COMPRESS_LEVEL,
 ) -> list[Path]:
     folder_path = Path(folder_path)
     if not folder_path.exists():
@@ -321,7 +329,7 @@ def get_video_image_files(
 
         image_file_path = video_grabs_folder / f"{video_file_path.name}.png"
         parent_connection.send(
-            (str(video_file_path), str(image_file_path), frame_percentage)
+            (str(video_file_path), str(image_file_path), frame_percentage, png_compress_level)
         )
 
         if parent_connection.poll(VIDEO_FRAME_PROCESS_TIMEOUT_SECONDS):
@@ -396,6 +404,8 @@ def sort_with_tight_clustering(
     image_files: list[Path],
     similarity_threshold: float | None = None,
     feature_weights: tuple[float, float, float, float, float, float] = DEFAULT_FEATURE_WEIGHTS,
+    feature_workers: int = FEATURE_WORKERS,
+    reducing_gap: float | None = None,
 ) -> list[tuple[Path, np.ndarray]]:
     print(f"Loading {len(image_files)} images and extracting visual features...")
     print("(This includes color histograms, spatial layout, texture, brightness, and aspect ratio)\n")
@@ -403,14 +413,19 @@ def sort_with_tight_clustering(
     images_with_features = []
     features = []
 
-    for i, img_path in enumerate(image_files, 1):
-        try:
-            feat = calculate_visual_features(str(img_path), feature_weights)
+    with ThreadPoolExecutor(max_workers=feature_workers) as executor:
+        extracted_features = executor.map(
+            partial(
+                calculate_visual_features,
+                feature_weights=feature_weights,
+                reducing_gap=reducing_gap,
+            ),
+            map(str, image_files),
+        )
+        for i, (img_path, feat) in enumerate(zip(image_files, extracted_features), 1):
             images_with_features.append((img_path, feat))
             features.append(feat)
-        except Exception as e:  # noqa: BLE001
-            print(f"  Warning: Skipping {img_path.name}: {e}")
-        print(f"Processing visual features {i}/{len(image_files)}")
+            print(f"Processing visual features {i}/{len(image_files)}")
 
     if not images_with_features:
         raise ValueError("No valid images found")
@@ -721,6 +736,9 @@ class ImageSorterGUI:
         self.date_pattern_preview = tk.StringVar()
         self.separator = tk.StringVar(value=user_settings["separator"])
         self.count_start = tk.IntVar(value=user_settings["count_start"])
+        self.feature_workers = tk.IntVar(value=user_settings["feature_workers"])
+        self.png_compress_level = tk.IntVar(value=user_settings["png_compress_level"])
+        self.resize_optimization = tk.StringVar(value=user_settings["resize_optimization"])
         self.is_processing = False
         self.stop_event = threading.Event()
 
@@ -828,6 +846,11 @@ class ImageSorterGUI:
         self.sort_rename_tab = ttk.Frame(self.notebook)
         self.extras_tab = extras.ExtrasTab(self.notebook)
         self.notebook.add(self.sort_rename_tab, text="Sort & Rename")
+        self.settings_tab = settings.SettingsTab(
+            self.notebook, self.feature_workers, self.png_compress_level,
+            self.resize_optimization,
+        )
+        self.notebook.add(self.settings_tab, text="Settings")
         self.notebook.add(self.extras_tab, text="Extras")
 
         self.sort_rename_tab.columnconfigure(0, weight=1)
@@ -1234,6 +1257,9 @@ class ImageSorterGUI:
             self.count_start.get(),
             self.folder_path.get(),
             self.prefix.get(),
+            self.feature_workers.get(),
+            self.png_compress_level.get(),
+            self.resize_optimization.get(),
         )
         self.log("Settings saved.")
 
@@ -1264,6 +1290,9 @@ class ImageSorterGUI:
         self.count_start.set(COUNT_START)
         self.folder_path.set(FOLDER_PATH)
         self.prefix.set(FILE_PREFIX)
+        self.feature_workers.set(FEATURE_WORKERS)
+        self.png_compress_level.set(PNG_COMPRESS_LEVEL)
+        self.resize_optimization.set(RESIZE_OPTIMIZATION)
         self.toggle_threshold()
         self.toggle_date_pattern()
         self.update_date_pattern_examples()
@@ -1272,6 +1301,9 @@ class ImageSorterGUI:
 
     def log_settings(self, heading):
         settings = (
+            ("Feature workers", self.feature_workers.get()),
+            ("PNG compression level", self.png_compress_level.get()),
+            ("Resize optimization", self.resize_optimization.get()),
             ("Media folder", self.folder_path.get()),
             ("File prefix", self.prefix.get()),
             ("Similarity threshold", self.threshold.get()),
@@ -1367,6 +1399,9 @@ class ImageSorterGUI:
         self.log(f"Folder: {folder}")
         self.log(f"Threshold: {threshold_val if threshold_val else 'auto'}")
         self.log(f"Feature weights: {feature_weights}")
+        self.log(f"Feature workers: {self.feature_workers.get()}")
+        self.log(f"PNG compression level: {self.png_compress_level.get()}")
+        self.log(f"Resize optimization: {self.resize_optimization.get()}")
         self.log(f"Video frame position: {self.video_frame_percentage.get()}%")
         self.log(f"Include videos: {self.include_videos.get()}")
         self.log(f"Prefix: '{self.prefix.get()}'")
@@ -1384,6 +1419,9 @@ class ImageSorterGUI:
                 feature_weights,
                 self.video_frame_percentage.get(),
                 self.include_videos.get(),
+                self.feature_workers.get(),
+                self.png_compress_level.get(),
+                RESIZE_REDUCING_GAPS[self.resize_optimization.get()],
             ),
             daemon=True
         )
@@ -1396,11 +1434,16 @@ class ImageSorterGUI:
         feature_weights,
         video_frame_percentage,
         include_videos,
+        feature_workers,
+        png_compress_level,
+        reducing_gap,
     ):
         try:
             image_files = get_image_files(folder)
             video_image_files = (
-                get_video_image_files(folder, self.stop_event, video_frame_percentage)
+                get_video_image_files(
+                    folder, self.stop_event, video_frame_percentage, png_compress_level
+                )
                 if include_videos
                 else []
             )
@@ -1421,6 +1464,8 @@ class ImageSorterGUI:
                 image_files,
                 threshold_val,
                 feature_weights,
+                feature_workers,
+                reducing_gap,
             )
 
             if video_image_files:

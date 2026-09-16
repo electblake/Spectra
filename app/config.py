@@ -16,6 +16,10 @@ TEXTURE_WEIGHT = 0.5
 BRIGHTNESS_WEIGHT = 0.8
 ASPECT_RATIO_WEIGHT = 0.25
 VIDEO_FRAME_PERCENTAGE = 50
+FEATURE_WORKERS = 4
+PNG_COMPRESS_LEVEL = 1
+RESIZE_OPTIMIZATION = "Default"
+RESIZE_REDUCING_GAPS = {"Default": None, "Low": 3.0, "Medium": 2.0, "High": 1.0}
 DRY_RUN = True
 BACKUP = True
 SIMILARITY_THRESHOLD = 0.01
@@ -48,6 +52,9 @@ def read_user_settings() -> tuple[dict, Path | None]:
 
     if not settings_path.exists():
         return {
+            "feature_workers": FEATURE_WORKERS,
+            "png_compress_level": PNG_COMPRESS_LEVEL,
+            "resize_optimization": RESIZE_OPTIMIZATION,
             "rgb_weight": RGB_WEIGHT,
             "hsv_weight": HSV_WEIGHT,
             "spatial_weight": SPATIAL_WEIGHT,
@@ -73,6 +80,9 @@ def read_user_settings() -> tuple[dict, Path | None]:
         settings.read_file(settings_file)
 
     return {
+        "feature_workers": settings.getint("performance", "feature_workers"),
+        "png_compress_level": settings.getint("performance", "png_compress_level"),
+        "resize_optimization": settings.get("performance", "resize_optimization"),
         "rgb_weight": settings.getfloat("feature_weights", "rgb_weight"),
         "hsv_weight": settings.getfloat("feature_weights", "hsv_weight"),
         "spatial_weight": settings.getfloat("feature_weights", "spatial_weight"),
@@ -153,6 +163,9 @@ def save_user_settings(
     count_start,
     folder_path,
     file_prefix,
+    feature_workers,
+    png_compress_level,
+    resize_optimization,
 ) -> None:
     settings_path = user_config_path(
         APP_NAME,
@@ -176,6 +189,11 @@ def save_user_settings(
     if not settings.has_section("renaming"):
         settings.add_section("renaming")
 
+    settings["performance"] = {
+        "feature_workers": str(feature_workers),
+        "png_compress_level": str(png_compress_level),
+        "resize_optimization": resize_optimization,
+    }
     settings.set("feature_weights", "rgb_weight", str(rgb_weight))
     settings.set("feature_weights", "hsv_weight", str(hsv_weight))
     settings.set("feature_weights", "spatial_weight", str(spatial_weight))
