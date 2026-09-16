@@ -801,7 +801,7 @@ class ImageSorterGUI:
 
         self.defaults_button = ttk.Button(
             button_frame,
-            text="Reset Default",
+            text="Restore Defaults",
             command=self.restore_default_settings,
         )
         self.defaults_button.pack(side=tk.LEFT, padx=5)

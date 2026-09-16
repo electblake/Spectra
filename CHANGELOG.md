@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-09-16
+
+### Added
+
+- Added a Settings tab with configurable image feature workers, temporary video-frame PNG compression, and image resize optimization.
+- Added saving and restoring defaults for performance settings.
+
+### Changed
+
+- Process image features concurrently with four workers by default while preserving sort order.
+- Use PNG compression level 1 for temporary video frames by default.
+- Existing `settings.ini` files require a `[performance]` section before launching this version; see the README for the required values.
+
 ## [0.5.4] - 2026-08-10
 
 ### Added
