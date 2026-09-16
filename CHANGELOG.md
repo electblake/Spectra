@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.6] - 2026-09-16
+
+### Changed
+
+- Always show the installation folder selection page, including during upgrades.
+- Enable automatic Setup logging for installation troubleshooting.
+- Update the application demo image.
+
 ## [0.5.5] - 2026-09-16
 
 ### Added

@@ -25,6 +25,7 @@ AppPublisher={#SpectraPublisher}
 DefaultDirName={localappdata}\Programs\{#SpectraName}
 DefaultGroupName={#SpectraName}
 DisableProgramGroupPage=yes
+DisableDirPage=no
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -37,6 +38,7 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 CloseApplications=yes
+SetupLogging=yes
 
 [Files]
 Source: "{#SpectraDistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
