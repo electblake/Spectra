@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-09-17
+
+### Added
+
+- Show live items per second and estimated time remaining for the current stage beside the progress percentage, using worker timestamps for accurate timing.
+- Add folder-based filename prefixes with folder-level and word selection.
+
+### Changed
+
+- Report folder scanning and sorting progress incrementally and process log updates in batches to keep the interface responsive.
+
+### Fixed
+
+- Skip unreadable images during visual feature extraction and report processed and skipped counts.
+
 ## [0.6.0] - 2026-09-16
 
 ### Changed
@@ -196,7 +211,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made `pyproject.toml` the sole source of the application version.
 - Refined application metadata, typing, formatting, and documentation.
 
-[Unreleased]: https://github.com/electblake/Spectra/compare/v0.5.4...HEAD
+[Unreleased]: https://github.com/electblake/Spectra/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/electblake/Spectra/compare/v0.6.0...v0.6.1
 [0.5.4]: https://github.com/electblake/Spectra/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/electblake/Spectra/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/electblake/Spectra/compare/v0.5.1...v0.5.2
