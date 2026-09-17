@@ -106,6 +106,9 @@ Uses DBSCAN (Density-Based Spatial Clustering) to:
 
 3. **Configure settings**
    - **File prefix**: Add a prefix to sorted filenames (optional)
+   - **Auto-prefix by folder**: Disable manual prefix entry and use the media folder name (`0`), its parent (`-1`), grandparent (`-2`), and so on. Use the spinbox arrows to select a non-positive level.
+     Folder prefixes keep ASCII letters, numbers, and dashes. Spaces and underscores split words; other characters are removed. Words are joined with the configured separator, which is also added before the file number. These controls apply to the current session.
+   - **Prefix word**: `-1` uses all words; `0` selects the first word, `1` the second, and so on. The preview shows the resulting prefix.
    - **Similarity threshold**: Lower values = tighter grouping (0.005-0.05 typical)
    - **Auto-determine**: Let Spectra calculate optimal threshold
    - **Dry run**: Preview changes without modifying files

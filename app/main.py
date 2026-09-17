@@ -8,10 +8,10 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 import tkinter as tk
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from functools import partial
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
@@ -264,10 +264,16 @@ def get_image_files(folder_path: str) -> list[Path]:
     if not folder.is_dir():
         raise NotADirectoryError(f"Not a directory: {folder_path}")
 
-    image_files = [
-        f for f in folder.iterdir()
-        if f.is_file() and f.suffix.lower() in IMAGE_EXTENSIONS
-    ]
+    print("Scanning image files...")
+    image_files = []
+    with os.scandir(folder) as entries:
+        for i, entry in enumerate(entries, 1):
+            if entry.is_file() and Path(entry.name).suffix.lower() in IMAGE_EXTENSIONS:
+                image_files.append(Path(entry.path))
+            if i == 1 or i % 500 == 0:
+                print(f"Scanning image files: {i} entries checked, {len(image_files)} images found...")
+    print(f"Found {len(image_files)} images")
+    print("Scanning image files 1/1")
 
     return sorted(image_files)
 
@@ -284,10 +290,16 @@ def get_video_image_files(
     if not folder_path.is_dir():
         raise NotADirectoryError(f"Not a directory: {folder_path}")
 
-    video_files = [
-        f for f in folder_path.iterdir()
-        if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS
-    ]
+    print("Scanning video files...")
+    video_files = []
+    with os.scandir(folder_path) as entries:
+        for i, entry in enumerate(entries, 1):
+            if entry.is_file() and Path(entry.name).suffix.lower() in VIDEO_EXTENSIONS:
+                video_files.append(Path(entry.path))
+            if i == 1 or i % 500 == 0:
+                print(f"Scanning video files: {i} entries checked, {len(video_files)} videos found...")
+    print(f"Found {len(video_files)} videos")
+    print("Scanning video files 1/1")
 
     if not video_files:
         return []
@@ -296,6 +308,7 @@ def get_video_image_files(
     video_grabs_folder.mkdir(exist_ok=True)
 
     print(f"Extracting frames from {len(video_files)} videos...")
+    print(f"Extracting video frames 0/{len(video_files)}")
 
     process_context = multiprocessing.get_context("spawn")
     parent_connection, child_connection = process_context.Pipe()
@@ -382,6 +395,7 @@ def sort_cluster_internally(cluster_features: np.ndarray, cluster_items: list) -
     visited = [False] * len(cluster_items)
     path = [0]
     visited[0] = True
+    print(f"Sorting images in cluster 1/{len(cluster_items)}")
 
     for _ in range(len(cluster_items) - 1):
         current = path[-1]
@@ -396,6 +410,8 @@ def sort_cluster_internally(cluster_features: np.ndarray, cluster_items: list) -
         if next_idx != -1:
             path.append(next_idx)
             visited[next_idx] = True
+        if len(path) % 100 == 0 or len(path) == len(cluster_items):
+            print(f"Sorting images in cluster {len(path)}/{len(cluster_items)}")
 
     return [cluster_items[i] for i in path]
 
@@ -414,21 +430,35 @@ def sort_with_tight_clustering(
     features = []
 
     with ThreadPoolExecutor(max_workers=feature_workers) as executor:
-        extracted_features = executor.map(
-            partial(
+        print("Submitting images for visual feature extraction...")
+        print(f"Processing visual features 0/{len(image_files)}")
+        extracted_features = [
+            executor.submit(
                 calculate_visual_features,
+                str(img_path),
                 feature_weights=feature_weights,
                 reducing_gap=reducing_gap,
-            ),
-            map(str, image_files),
-        )
-        for i, (img_path, feat) in enumerate(zip(image_files, extracted_features), 1):
-            images_with_features.append((img_path, feat))
-            features.append(feat)
+            )
+            for img_path in image_files
+        ]
+        for i, (img_path, future) in enumerate(zip(image_files, extracted_features), 1):
+            try:
+                feat = future.result()
+            except Exception as error:  # noqa: BLE001
+                print(f"  Warning: Skipping {img_path}: {error}")
+            else:
+                images_with_features.append((img_path, feat))
+                features.append(feat)
             print(f"Processing visual features {i}/{len(image_files)}")
+
+    skipped_count = len(image_files) - len(images_with_features)
+    print(f"Visual feature extraction complete: {len(images_with_features)} processed, {skipped_count} skipped")
 
     if not images_with_features:
         raise ValueError("No valid images found")
+
+    if len(images_with_features) == 1:
+        return images_with_features
 
     features = np.array(features)
     n_images = len(features)
@@ -441,11 +471,14 @@ def sort_with_tight_clustering(
     print("Calculating visual similarity 1/1")
 
     if similarity_threshold is None:
+        print(f"Determining similarity threshold 0/{n_images}")
         nn_distances = []
         for i in range(n_images):
             positive_distances = distance_matrix[i][distance_matrix[i] > 0]
             if positive_distances.size:
                 nn_distances.append(np.min(positive_distances))
+            if (i + 1) % 100 == 0 or i + 1 == n_images:
+                print(f"Determining similarity threshold {i + 1}/{n_images}")
         similarity_threshold = float(np.percentile(nn_distances, 70))
 
     print(f"\nClustering with DBSCAN (eps={similarity_threshold:.4f})...")
@@ -717,6 +750,10 @@ class ImageSorterGUI:
 
         self.folder_path = tk.StringVar(value=user_settings["folder_path"])
         self.prefix = tk.StringVar(value=user_settings["file_prefix"])
+        self.auto_prefix = tk.BooleanVar(value=False)
+        self.prefix_folder_level = tk.IntVar(value=0)
+        self.prefix_word = tk.IntVar(value=-1)
+        self.prefix_folder_preview = tk.StringVar()
         self.threshold = tk.StringVar(value=str(user_settings["similarity_threshold"]))
         self.auto_threshold = tk.BooleanVar(value=user_settings["auto_determine"])
         self.rgb_weight = tk.DoubleVar(value=user_settings["rgb_weight"])
@@ -819,6 +856,8 @@ class ImageSorterGUI:
 
         self.status_text = tk.StringVar(value="Ready 0/0")
         self.progress_percent_text = tk.StringVar(value="0%")
+        self.progress_metrics_text = tk.StringVar(value="— items/s  — s")
+        self.progress_stage = None
         ttk.Label(status_frame, textvariable=self.status_text).grid(
             row=0, column=0, sticky=tk.W, padx=(0, 10)
         )
@@ -830,6 +869,9 @@ class ImageSorterGUI:
         self.progress.grid(row=0, column=1, sticky=(tk.W, tk.E))
         ttk.Label(status_frame, textvariable=self.progress_percent_text).grid(
             row=0, column=2, sticky=tk.E, padx=(10, 0)
+        )
+        ttk.Label(status_frame, textvariable=self.progress_metrics_text).grid(
+            row=0, column=3, sticky=tk.E, padx=(10, 0)
         )
 
         controls_pane = ttk.Frame(self.main_panes)
@@ -943,12 +985,65 @@ class ImageSorterGUI:
         ttk.Label(renaming_frame, text="Prefix:").grid(
             row=renaming_row, column=0, sticky=tk.W, pady=5
         )
-        ttk.Entry(renaming_frame, textvariable=self.prefix, width=40).grid(
+        self.prefix_entry = ttk.Entry(renaming_frame, textvariable=self.prefix, width=40)
+        self.prefix_entry.grid(
             row=renaming_row, column=1, sticky=tk.W, padx=5
         )
         ttk.Label(renaming_frame, text="(e.g., 'sorted_' → sorted_001.jpg)").grid(
             row=renaming_row, column=2, sticky=tk.W
         )
+        renaming_row += 1
+
+        ttk.Checkbutton(
+            renaming_frame,
+            text="Auto-prefix by folder",
+            variable=self.auto_prefix,
+            command=self.toggle_auto_prefix,
+        ).grid(row=renaming_row, column=1, sticky=tk.W, padx=5, pady=5)
+        renaming_row += 1
+
+        ttk.Label(renaming_frame, text="Prefix folder level:").grid(
+            row=renaming_row, column=0, sticky=tk.W, pady=5
+        )
+        self.prefix_folder_spinbox = ttk.Spinbox(
+            renaming_frame,
+            textvariable=self.prefix_folder_level,
+            from_=0,
+            to=0,
+            increment=1,
+            width=10,
+            state="readonly",
+        )
+        self.prefix_folder_spinbox.grid(
+            row=renaming_row, column=1, sticky=tk.W, padx=5
+        )
+        ttk.Label(
+            renaming_frame,
+            textvariable=self.prefix_folder_preview,
+        ).grid(row=renaming_row, column=2, sticky=tk.W)
+        renaming_row += 1
+
+        ttk.Label(renaming_frame, text="Prefix word:").grid(
+            row=renaming_row, column=0, sticky=tk.W, pady=5
+        )
+        self.prefix_word_spinbox = ttk.Spinbox(
+            renaming_frame,
+            textvariable=self.prefix_word,
+            from_=-1,
+            to=-1,
+            increment=1,
+            width=10,
+            state="readonly",
+        )
+        self.prefix_word_spinbox.grid(
+            row=renaming_row, column=1, sticky=tk.W, padx=5
+        )
+        self.folder_path.trace_add("write", self.update_prefix_folder_preview)
+        self.prefix_folder_level.trace_add("write", self.update_prefix_folder_preview)
+        self.prefix_word.trace_add("write", self.update_prefix_folder_preview)
+        self.separator.trace_add("write", self.update_prefix_folder_preview)
+        self.update_prefix_folder_preview()
+        self.toggle_auto_prefix()
         renaming_row += 1
 
         ttk.Label(renaming_frame, text="Start counting at:").grid(
@@ -1180,22 +1275,65 @@ class ImageSorterGUI:
         folder = filedialog.askdirectory(title="Select Media Folder")
         if folder:
             self.folder_path.set(folder)
-            try:
-                image_files = get_image_files(folder)
-                video_files = (
-                    [
-                        file_path for file_path in Path(folder).iterdir()
-                        if file_path.is_file()
-                        and file_path.suffix.lower() in VIDEO_EXTENSIONS
-                    ]
-                    if self.include_videos.get()
-                    else []
-                )
-                self.log(
-                    f"\nFound {len(image_files)} images and {len(video_files)} videos in {folder}"
-                )
-            except Exception as e:  # noqa: BLE001
-                self.log(f"\nError: {e}")
+            include_videos = self.include_videos.get()
+            threading.Thread(
+                target=self.scan_folder,
+                args=(folder, include_videos),
+                daemon=True,
+            ).start()
+
+    def scan_folder(self, folder, include_videos):
+        try:
+            image_files = get_image_files(folder)
+            video_files = []
+            if include_videos:
+                print("Scanning video files...")
+                with os.scandir(folder) as entries:
+                    for i, entry in enumerate(entries, 1):
+                        if entry.is_file() and Path(entry.name).suffix.lower() in VIDEO_EXTENSIONS:
+                            video_files.append(Path(entry.path))
+                        if i == 1 or i % 500 == 0:
+                            print(f"Scanning video files: {i} entries checked, {len(video_files)} videos found...")
+                print("Scanning video files 1/1")
+            self.log(
+                f"\nFound {len(image_files)} images and {len(video_files)} videos in {folder}"
+            )
+        except Exception as e:  # noqa: BLE001
+            self.log(f"\nError: {e}")
+
+    def update_prefix_folder_preview(self, *_):
+        if not self.folder_path.get():
+            self.prefix_folder_spinbox.config(from_=0)
+            self.prefix_folder_level.set(0)
+            self.prefix_word_spinbox.config(to=-1)
+            self.prefix_word.set(-1)
+            self.prefix_folder_preview.set("")
+            return
+        media_folder = Path(self.folder_path.get()).resolve()
+        self.prefix_folder_spinbox.config(from_=-len(media_folder.parents))
+        level = max(self.prefix_folder_level.get(), -len(media_folder.parents))
+        if level != self.prefix_folder_level.get():
+            self.prefix_folder_level.set(level)
+        prefix_folder = media_folder if level == 0 else media_folder.parents[-level - 1]
+        prefix = re.sub(r"[^a-zA-Z0-9_\s-]", "", prefix_folder.name)
+        words = re.findall(r"[^\s_]+", prefix)
+        self.prefix_word_spinbox.config(to=len(words) - 1)
+        word = min(self.prefix_word.get(), len(words) - 1)
+        if word != self.prefix_word.get():
+            self.prefix_word.set(word)
+        prefix = self.separator.get().join(words) if word == -1 else words[word]
+        prefix += self.separator.get()
+        self.prefix_folder_preview.set(prefix)
+
+    def toggle_auto_prefix(self):
+        if self.auto_prefix.get():
+            self.prefix_entry.config(state=tk.DISABLED)
+            self.prefix_folder_spinbox.config(state="readonly")
+            self.prefix_word_spinbox.config(state="readonly")
+        else:
+            self.prefix_entry.config(state=tk.NORMAL)
+            self.prefix_folder_spinbox.config(state=tk.DISABLED)
+            self.prefix_word_spinbox.config(state=tk.DISABLED)
 
     def toggle_threshold(self):
         if self.auto_threshold.get():
@@ -1288,8 +1426,12 @@ class ImageSorterGUI:
         self.date_pattern.set(DATE_PATTERN)
         self.separator.set(SEPARATOR)
         self.count_start.set(COUNT_START)
+        self.prefix_word.set(-1)
         self.folder_path.set(FOLDER_PATH)
         self.prefix.set(FILE_PREFIX)
+        self.auto_prefix.set(False)
+        self.prefix_folder_level.set(0)
+        self.toggle_auto_prefix()
         self.feature_workers.set(FEATURE_WORKERS)
         self.png_compress_level.set(PNG_COMPRESS_LEVEL)
         self.resize_optimization.set(RESIZE_OPTIMIZATION)
@@ -1306,6 +1448,9 @@ class ImageSorterGUI:
             ("Resize optimization", self.resize_optimization.get()),
             ("Media folder", self.folder_path.get()),
             ("File prefix", self.prefix.get()),
+            ("Auto-prefix by folder", self.auto_prefix.get()),
+            ("Prefix folder level", self.prefix_folder_level.get()),
+            ("Prefix word", self.prefix_word.get()),
             ("Similarity threshold", self.threshold.get()),
             ("Auto-determine threshold", self.auto_threshold.get()),
             ("RGB histogram weight", self.rgb_weight.get()),
@@ -1331,7 +1476,17 @@ class ImageSorterGUI:
     def log(self, message):
         print(message)
 
-    def update_status_from_output(self, text):
+    def update_status_from_output(self, text, timestamp):
+        if text.strip().endswith("..."):
+            self.progress_stage = None
+            self.progress_metrics_text.set("— items/s  — s")
+            self.status_text.set(text.strip())
+            if str(self.progress["mode"]) != "indeterminate":
+                self.progress.config(mode="indeterminate", maximum=100)
+                self.progress.start(50)
+            self.progress_percent_text.set("…")
+            return
+
         match = re.fullmatch(r"\s*(.+?)\s+(\d+)/(\d+)\s*", text)
         if match is None:
             return
@@ -1339,9 +1494,34 @@ class ImageSorterGUI:
         process_name, current_text, total_text = match.groups()
         current = int(current_text)
         total = int(total_text)
+        stage = (process_name, total)
+        if stage != self.progress_stage or current < self.progress_current:
+            self.progress_stage = stage
+            self.progress_started_at = timestamp
+            self.progress_started_count = current
+            self.progress_metrics_text.set("— items/s  — s")
+        self.progress_current = current
+        completed = current - self.progress_started_count
+        if completed > 0:
+            rate = completed / (timestamp - self.progress_started_at)
+            seconds = round((total - current) / rate)
+            hours, seconds = divmod(seconds, 3600)
+            minutes, seconds = divmod(seconds, 60)
+            eta = f"{seconds}s"
+            if minutes or hours:
+                eta = f"{minutes}m {eta}"
+            if hours:
+                eta = f"{hours}h {eta}"
+            self.progress_metrics_text.set(f"{rate:.1f} items/s  {eta}")
         percentage = round(current / total * 100)
         self.status_text.set(f"{process_name} {current}/{total}")
-        self.progress.config(maximum=total, value=current)
+        self.progress.stop()
+        self.progress.config(mode="determinate", maximum=total, value=current)
+        if current == 0 and total == 1:
+            self.progress.config(mode="indeterminate", maximum=100)
+            self.progress.start(50)
+            self.progress_percent_text.set("…")
+            return
         self.progress_percent_text.set(f"{percentage}%")
 
     def start_sorting(self):
@@ -1375,6 +1555,17 @@ class ImageSorterGUI:
             self.aspect_ratio_weight.get(),
         )
 
+        prefix = self.prefix.get()
+        if self.auto_prefix.get():
+            media_folder = Path(folder).resolve()
+            level = self.prefix_folder_level.get()
+            prefix_folder = media_folder if level == 0 else media_folder.parents[-level - 1]
+            prefix = re.sub(r"[^a-zA-Z0-9_\s-]", "", prefix_folder.name)
+            words = re.findall(r"[^\s_]+", prefix)
+            word = self.prefix_word.get()
+            prefix = self.separator.get().join(words) if word == -1 else words[word]
+            prefix += self.separator.get()
+
         if not self.dry_run.get():
             response = messagebox.askyesno(
                 "Confirm Rename",
@@ -1389,9 +1580,14 @@ class ImageSorterGUI:
         self.stop_event.clear()
         self.start_button.config(state=tk.DISABLED)
         self.stop_button.config(state=tk.NORMAL)
-        self.status_text.set("Starting media sorting 0/1")
-        self.progress.config(maximum=1, value=0)
-        self.progress_percent_text.set("0%")
+        self.status_text.set("Scanning image files...")
+        self.progress.stop()
+        self.progress.config(mode="indeterminate", maximum=100, value=0)
+        self.progress.start(50)
+        self.progress_percent_text.set("…")
+
+        self.progress_stage = None
+        self.progress_metrics_text.set("— items/s  — s")
 
         self.log_text.delete(1.0, tk.END)
         self.log("="*60)
@@ -1404,7 +1600,7 @@ class ImageSorterGUI:
         self.log(f"Resize optimization: {self.resize_optimization.get()}")
         self.log(f"Video frame position: {self.video_frame_percentage.get()}%")
         self.log(f"Include videos: {self.include_videos.get()}")
-        self.log(f"Prefix: '{self.prefix.get()}'")
+        self.log(f"Prefix: '{prefix}'")
         self.log(f"Parse dates: {self.parse_dates.get()}")
         self.log(f"Count start: {self.count_start.get()}")
         self.log(f"Dry Run: {self.dry_run.get()}")
@@ -1422,6 +1618,7 @@ class ImageSorterGUI:
                 self.feature_workers.get(),
                 self.png_compress_level.get(),
                 RESIZE_REDUCING_GAPS[self.resize_optimization.get()],
+                prefix,
             ),
             daemon=True
         )
@@ -1437,6 +1634,7 @@ class ImageSorterGUI:
         feature_workers,
         png_compress_level,
         reducing_gap,
+        prefix,
     ):
         try:
             image_files = get_image_files(folder)
@@ -1472,7 +1670,7 @@ class ImageSorterGUI:
                 rename_media(
                     sorted_images,
                     folder,
-                    prefix=self.prefix.get(),
+                    prefix=prefix,
                     dry_run=self.dry_run.get(),
                     backup=self.backup.get(),
                     parse_dates=self.parse_dates.get(),
@@ -1484,7 +1682,7 @@ class ImageSorterGUI:
             else:
                 rename_images(
                     sorted_images,
-                    prefix=self.prefix.get(),
+                    prefix=prefix,
                     dry_run=self.dry_run.get(),
                     backup=self.backup.get(),
                     parse_dates=self.parse_dates.get(),
@@ -1505,9 +1703,13 @@ class ImageSorterGUI:
         self.root.after(0, lambda: self._on_complete_ui(success))
 
     def _on_complete_ui(self, success):
+        self.progress.stop()
+        self.progress.config(mode="determinate")
         self.start_button.config(state=tk.NORMAL)
         self.stop_button.config(state=tk.DISABLED)
         self.is_processing = False
+        self.progress_stage = None
+        self.progress_metrics_text.set("— items/s  0s" if success else "— items/s  — s")
 
         if success:
             self.status_text.set("Media sorting complete 1/1")
@@ -1602,13 +1804,15 @@ class TextRedirector:
         self.widget.after(50, self.write_queued_text)
 
     def write(self, text):
-        self.text_queue.put(text)
+        self.text_queue.put((text, time.perf_counter()))
 
     def write_queued_text(self):
-        while not self.text_queue.empty():
-            text = self.text_queue.get_nowait()
+        for _ in range(200):
+            if self.text_queue.empty():
+                break
+            text, timestamp = self.text_queue.get_nowait()
             self.widget.insert(tk.END, text)
-            self.status_callback(text)
+            self.status_callback(text, timestamp)
         self.widget.see(tk.END)
         self.widget.after(50, self.write_queued_text)
 
