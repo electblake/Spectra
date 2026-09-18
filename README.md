@@ -1,7 +1,7 @@
 <center>
 <img src="Spectra.png" alt="Spectra" width="350">
 <h3>Intelligent image/video sorting by visual similarity</h3>
-<p>Spectra automatically organizes your image collections by analyzing color, texture, and content similarity. Say goodbye to chaotic folders — let your images flow in visual harmony.</p>
+<p>Spectra sorts and renames images and videos by visual similarity, using color, spatial layout, texture, brightness, and aspect ratio.</p>
 </center>
 
 
@@ -21,7 +21,7 @@
 - **🧩 Smart clustering**: Uses DBSCAN algorithm to group visually similar images
 - **🔄 Nearest-neighbor sorting**: Creates smooth visual transitions within and between clusters
 - **🖥️ User-friendly GUI**: Clean Tkinter interface—no command line needed
-- **🛡️ Safe operations**: Dry-run mode and automatic backups protect your files
+- **🛡️ Safe operations**: Preview renaming with dry-run mode and optionally back up originals
 - **📊 Detailed logging**: Real-time progress tracking and CSV mapping of all changes
 - **⏱️ Live progress**: Stage-by-stage status, item counts, and completion percentage
 - **⚙️ Customizable**: Adjustable similarity thresholds and filename prefixes
@@ -34,7 +34,7 @@
 
 ### Install Spectra on Windows (recommended)
 
-No Python, PowerShell, or other development tools are required.
+No development tools need to be installed beforehand. Setup downloads Python and installs the application dependencies.
 
 1. Open the [latest Spectra release](https://github.com/electblake/Spectra/releases/latest).
 2. Download the file ending in `windows-amd64-Setup.exe`.
@@ -66,9 +66,9 @@ Spectra analyzes each image across multiple dimensions:
 ### 2. Intelligent clustering
 
 Uses DBSCAN (Density-Based Spatial Clustering) to:
+
 - Group images with similar visual characteristics
-- Automatically determine optimal cluster count
-- Handle outliers gracefully
+- Determine clusters from the selected similarity threshold
 
 ### 3. Sequential ordering
 
@@ -78,7 +78,7 @@ Uses DBSCAN (Density-Based Spatial Clustering) to:
 
 ### 4. Safe renaming
 
-- Renames files sequentially (e.g., `001.jpg`, `002.jpg`, `003.jpg`)
+- Renames files sequentially; number padding depends on the final counter value
 - Creates backup of originals (optional)
 - Generates CSV mapping file for reference
 
@@ -106,11 +106,8 @@ Uses DBSCAN (Density-Based Spatial Clustering) to:
 
 3. **Configure settings**
    - **File prefix**: Add a prefix to sorted filenames (optional)
-   - **Auto-prefix by folder**: Disable manual prefix entry and use the media folder name (`0`), its parent (`-1`), grandparent (`-2`), and so on. Use the spinbox arrows to select a non-positive level.
-     Folder prefixes keep ASCII letters, numbers, and dashes. Spaces and underscores split words; other characters are removed. Words are joined with the configured separator, which is also added before the file number. These controls apply to the current session.
-   - **Prefix word**: `-1` uses all words; `0` selects the first word, `1` the second, and so on. The preview shows the resulting prefix.
    - **Similarity threshold**: Lower values = tighter grouping (0.005-0.05 typical)
-   - **Auto-determine**: Let Spectra calculate optimal threshold
+   - **Auto-determine**: Estimate a threshold from nearest-neighbor distances
    - **Dry run**: Preview changes without modifying files
    - **Create backup**: Saves originals to `backup_originals/` folder
 
@@ -123,28 +120,27 @@ Uses DBSCAN (Density-Based Spatial Clustering) to:
 
 ## 📊 Output files
 
-After processing, Spectra generates:
+Example output for three images with prefix `sorted_`, counting from `1`, with backups enabled and dry run disabled:
 
 ```
 your-image-folder/
-├── sorted_001.jpg          # Renamed images in order
-├── sorted_002.jpg
-├── sorted_003.jpg
-├── ...
+├── sorted_1.jpg            # Renamed images in order
+├── sorted_2.jpg
+├── sorted_3.png
 ├── rename_mapping.csv      # Original → New name mapping
 └── backup_originals/       # Original files (if backup enabled)
-    ├── original_name1.jpg
-    ├── original_name2.jpg
-    └── ...
+    ├── IMG_5234.jpg
+    ├── DSC_0891.jpg
+    └── photo.png
 ```
 
 ### Mapping file format
 
 ```csv
 Original Name,New Name
-"IMG_5234.jpg","sorted_001.jpg"
-"DSC_0891.jpg","sorted_002.jpg"
-"photo.png","sorted_003.png"
+"IMG_5234.jpg","sorted_1.jpg"
+"DSC_0891.jpg","sorted_2.jpg"
+"photo.png","sorted_3.png"
 ```
 
 ---
@@ -182,20 +178,14 @@ resize_optimization = Default
 | 0.02-0.05 | Loose—broader visual themes |
 | Auto | Spectra calculates based on your dataset |
 
-### Performance notes
-
-- **Processing time**: ~0.5-1 second per image (depends on resolution)
-- **Memory usage**: ~50-100MB per 1000 images
-- **Optimal batch size**: Up to 5000 images per folder
-
 ---
 
 ## 🔒 Safety features
 
 - ✅ **Dry run mode**: Preview all changes before committing
-- ✅ **Automatic backups**: Original files preserved in separate folder
+- ✅ **Optional backups**: Copies originals to `backup_originals/` when enabled
 - ✅ **Mapping file**: CSV log of all filename changes
-- ✅ **Non-destructive**: Images are renamed, never modified
+- ✅ **Original image data**: Renaming does not re-encode images
 - ✅ **Error handling**: Skips problematic images with warnings
 
 ---

@@ -850,10 +850,6 @@ class ImageSorterGUI:
 
         self.folder_path = tk.StringVar(value=user_settings["folder_path"])
         self.prefix = tk.StringVar(value=user_settings["file_prefix"])
-        self.auto_prefix = tk.BooleanVar(value=False)
-        self.prefix_folder_level = tk.IntVar(value=0)
-        self.prefix_word = tk.IntVar(value=-1)
-        self.prefix_folder_preview = tk.StringVar()
         self.threshold = tk.StringVar(value=str(user_settings["similarity_threshold"]))
         self.auto_threshold = tk.BooleanVar(value=user_settings["auto_determine"])
         self.rgb_weight = tk.DoubleVar(value=user_settings["rgb_weight"])
@@ -1094,58 +1090,6 @@ class ImageSorterGUI:
         ttk.Label(renaming_frame, text="(e.g., 'sorted_' → sorted_001.jpg)").grid(
             row=renaming_row, column=2, sticky=tk.W
         )
-        renaming_row += 1
-
-        ttk.Checkbutton(
-            renaming_frame,
-            text="Auto-prefix by folder",
-            variable=self.auto_prefix,
-            command=self.toggle_auto_prefix,
-        ).grid(row=renaming_row, column=1, sticky=tk.W, padx=5, pady=5)
-        renaming_row += 1
-
-        ttk.Label(renaming_frame, text="Prefix folder level:").grid(
-            row=renaming_row, column=0, sticky=tk.W, pady=5
-        )
-        self.prefix_folder_spinbox = ttk.Spinbox(
-            renaming_frame,
-            textvariable=self.prefix_folder_level,
-            from_=0,
-            to=0,
-            increment=1,
-            width=10,
-            state="readonly",
-        )
-        self.prefix_folder_spinbox.grid(
-            row=renaming_row, column=1, sticky=tk.W, padx=5
-        )
-        ttk.Label(
-            renaming_frame,
-            textvariable=self.prefix_folder_preview,
-        ).grid(row=renaming_row, column=2, sticky=tk.W)
-        renaming_row += 1
-
-        ttk.Label(renaming_frame, text="Prefix word:").grid(
-            row=renaming_row, column=0, sticky=tk.W, pady=5
-        )
-        self.prefix_word_spinbox = ttk.Spinbox(
-            renaming_frame,
-            textvariable=self.prefix_word,
-            from_=-1,
-            to=-1,
-            increment=1,
-            width=10,
-            state="readonly",
-        )
-        self.prefix_word_spinbox.grid(
-            row=renaming_row, column=1, sticky=tk.W, padx=5
-        )
-        self.folder_path.trace_add("write", self.update_prefix_folder_preview)
-        self.prefix_folder_level.trace_add("write", self.update_prefix_folder_preview)
-        self.prefix_word.trace_add("write", self.update_prefix_folder_preview)
-        self.separator.trace_add("write", self.update_prefix_folder_preview)
-        self.update_prefix_folder_preview()
-        self.toggle_auto_prefix()
         renaming_row += 1
 
         ttk.Label(renaming_frame, text="Start counting at:").grid(
@@ -1404,40 +1348,6 @@ class ImageSorterGUI:
         except Exception as e:  # noqa: BLE001
             self.log(f"\nError: {e}")
 
-    def update_prefix_folder_preview(self, *_):
-        if not self.folder_path.get():
-            self.prefix_folder_spinbox.config(from_=0)
-            self.prefix_folder_level.set(0)
-            self.prefix_word_spinbox.config(to=-1)
-            self.prefix_word.set(-1)
-            self.prefix_folder_preview.set("")
-            return
-        media_folder = Path(self.folder_path.get()).resolve()
-        self.prefix_folder_spinbox.config(from_=-len(media_folder.parents))
-        level = max(self.prefix_folder_level.get(), -len(media_folder.parents))
-        if level != self.prefix_folder_level.get():
-            self.prefix_folder_level.set(level)
-        prefix_folder = media_folder if level == 0 else media_folder.parents[-level - 1]
-        prefix = re.sub(r"[^a-zA-Z0-9_\s-]", "", prefix_folder.name)
-        words = re.findall(r"[^\s_]+", prefix)
-        self.prefix_word_spinbox.config(to=len(words) - 1)
-        word = min(self.prefix_word.get(), len(words) - 1)
-        if word != self.prefix_word.get():
-            self.prefix_word.set(word)
-        prefix = self.separator.get().join(words) if word == -1 else words[word]
-        prefix += self.separator.get()
-        self.prefix_folder_preview.set(prefix)
-
-    def toggle_auto_prefix(self):
-        if self.auto_prefix.get():
-            self.prefix_entry.config(state=tk.DISABLED)
-            self.prefix_folder_spinbox.config(state="readonly")
-            self.prefix_word_spinbox.config(state="readonly")
-        else:
-            self.prefix_entry.config(state=tk.NORMAL)
-            self.prefix_folder_spinbox.config(state=tk.DISABLED)
-            self.prefix_word_spinbox.config(state=tk.DISABLED)
-
     def toggle_threshold(self):
         if self.auto_threshold.get():
             self.threshold_entry.state(["disabled"])
@@ -1530,12 +1440,8 @@ class ImageSorterGUI:
         self.date_pattern.set(DATE_PATTERN)
         self.separator.set(SEPARATOR)
         self.count_start.set(COUNT_START)
-        self.prefix_word.set(-1)
         self.folder_path.set(FOLDER_PATH)
         self.prefix.set(FILE_PREFIX)
-        self.auto_prefix.set(False)
-        self.prefix_folder_level.set(0)
-        self.toggle_auto_prefix()
         self.feature_workers.set(FEATURE_WORKERS)
         self.video_workers.set(VIDEO_WORKERS)
         self.png_compress_level.set(PNG_COMPRESS_LEVEL)
@@ -1554,9 +1460,6 @@ class ImageSorterGUI:
             ("Resize optimization", self.resize_optimization.get()),
             ("Media folder", self.folder_path.get()),
             ("File prefix", self.prefix.get()),
-            ("Auto-prefix by folder", self.auto_prefix.get()),
-            ("Prefix folder level", self.prefix_folder_level.get()),
-            ("Prefix word", self.prefix_word.get()),
             ("Similarity threshold", self.threshold.get()),
             ("Auto-determine threshold", self.auto_threshold.get()),
             ("RGB histogram weight", self.rgb_weight.get()),
@@ -1664,15 +1567,6 @@ class ImageSorterGUI:
         )
 
         prefix = self.prefix.get()
-        if self.auto_prefix.get():
-            media_folder = Path(folder).resolve()
-            level = self.prefix_folder_level.get()
-            prefix_folder = media_folder if level == 0 else media_folder.parents[-level - 1]
-            prefix = re.sub(r"[^a-zA-Z0-9_\s-]", "", prefix_folder.name)
-            words = re.findall(r"[^\s_]+", prefix)
-            word = self.prefix_word.get()
-            prefix = self.separator.get().join(words) if word == -1 else words[word]
-            prefix += self.separator.get()
 
         if not self.dry_run.get():
             response = messagebox.askyesno(
