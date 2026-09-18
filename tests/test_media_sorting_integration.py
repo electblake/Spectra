@@ -6,6 +6,8 @@ import pytest
 from collections import Counter
 from pathlib import Path
 
+from PIL import Image
+
 from app.config import (
     DEFAULT_FEATURE_WEIGHTS,
     IMAGE_EXTENSIONS,
@@ -28,6 +30,40 @@ SAMPLES_FOLDER = PROJECT_ROOT / "samples"
 def file_digest(file_path: Path) -> str:
     with file_path.open("rb") as file:
         return hashlib.file_digest(file, "sha256").hexdigest()
+
+
+@pytest.mark.parametrize("extension", [".gif", ".GIF"])
+def test_gif_frame_is_extracted_and_original_renamed_once(tmp_path: Path, extension: str) -> None:
+    working_folder = tmp_path / "News & Politics"
+    working_folder.mkdir()
+    gif_path = working_folder / f"13n3jb0 03 She came prepared!{extension}"
+    frames = [Image.new("RGB", (16, 16), color) for color in ("red", "green", "blue")]
+    frames[0].save(gif_path, save_all=True, append_images=frames[1:], duration=100, loop=0)
+    original_digest = file_digest(gif_path)
+
+    image_files = get_image_files(working_folder)
+    video_image_files = get_video_image_files(working_folder, threading.Event(), frame_percentage=50)
+    assert image_files == []
+    assert len(video_image_files) == 1
+    with Image.open(video_image_files[0]) as extracted_frame:
+        assert extracted_frame.convert("RGB").getpixel((0, 0)) == (0, 128, 0)
+
+    sorted_media = sort_with_tight_clustering(
+        image_files + video_image_files,
+        SIMILARITY_THRESHOLD,
+        DEFAULT_FEATURE_WEIGHTS,
+    )
+    rename_media(sorted_media, working_folder, prefix="sorted_", backup=True)
+    cleanup_video_grabs(working_folder)
+
+    assert file_digest(working_folder / f"sorted_1{extension}") == original_digest
+    assert file_digest(working_folder / "backup_originals" / gif_path.name) == original_digest
+    assert not gif_path.exists()
+    assert not list(working_folder.glob("__temp_media_*"))
+    with (working_folder / "rename_mapping.csv").open(newline="", encoding="utf-8") as mapping_file:
+        assert list(csv.DictReader(mapping_file)) == [
+            {"Original Name": gif_path.name, "New Name": f"sorted_1{extension}"},
+        ]
 
 
 @pytest.mark.parametrize("video_workers", [1, 3])

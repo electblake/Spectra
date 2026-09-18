@@ -42,7 +42,7 @@ DEFAULT_FEATURE_WEIGHTS = (
     ASPECT_RATIO_WEIGHT,
 )
 
-IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp'}
+IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
 VIDEO_EXTENSIONS = {'.mp4', '.avi', '.gif', '.wmv', '.mpeg', '.mov', '.m4v'}
 
 def read_user_settings() -> tuple[dict, Path | None]:
