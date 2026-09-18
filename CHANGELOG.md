@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-09-18
+
+### Removed
+
+- Remove automatic folder-based filename prefixes and their folder-level and word controls; retain the manually entered file prefix.
+
+### Fixed
+
+- Treat GIF files as videos during media sorting so they use video frame extraction instead of image scanning.
+
 ## [0.6.3] - 2026-09-18
 
 ### Fixed
@@ -235,7 +245,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made `pyproject.toml` the sole source of the application version.
 - Refined application metadata, typing, formatting, and documentation.
 
-[Unreleased]: https://github.com/electblake/Spectra/compare/v0.6.3...HEAD
+[Unreleased]: https://github.com/electblake/Spectra/compare/v0.6.4...HEAD
+[0.6.4]: https://github.com/electblake/Spectra/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/electblake/Spectra/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/electblake/Spectra/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/electblake/Spectra/compare/v0.6.0...v0.6.1
