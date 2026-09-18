@@ -255,7 +255,7 @@ def feature_distance(feat1: np.ndarray, feat2: np.ndarray) -> float:
     return np.linalg.norm(feat1 - feat2)
 
 
-def get_image_files(folder_path: str) -> list[Path]:
+def get_image_files(folder_path: str, stop_event: threading.Event | None = None) -> list[Path]:
     folder = Path(folder_path)
 
     if not folder.exists():
@@ -268,6 +268,8 @@ def get_image_files(folder_path: str) -> list[Path]:
     image_files = []
     with os.scandir(folder) as entries:
         for i, entry in enumerate(entries, 1):
+            if stop_event is not None and stop_event.is_set():
+                return []
             if entry.is_file() and Path(entry.name).suffix.lower() in IMAGE_EXTENSIONS:
                 image_files.append(Path(entry.path))
             if i == 1 or i % 500 == 0:
@@ -294,6 +296,8 @@ def get_video_image_files(
     video_files = []
     with os.scandir(folder_path) as entries:
         for i, entry in enumerate(entries, 1):
+            if stop_event.is_set():
+                return []
             if entry.is_file() and Path(entry.name).suffix.lower() in VIDEO_EXTENSIONS:
                 video_files.append(Path(entry.path))
             if i == 1 or i % 500 == 0:
@@ -345,7 +349,19 @@ def get_video_image_files(
             (str(video_file_path), str(image_file_path), frame_percentage, png_compress_level)
         )
 
-        if parent_connection.poll(VIDEO_FRAME_PROCESS_TIMEOUT_SECONDS):
+        deadline = time.monotonic() + VIDEO_FRAME_PROCESS_TIMEOUT_SECONDS
+        while not parent_connection.poll(0.05):
+            if stop_event.is_set():
+                video_process.terminate()
+                video_process.join()
+                parent_connection.close()
+                cleanup_video_grabs(folder_path)
+                print("Frame extraction stopped.")
+                return []
+            if time.monotonic() >= deadline:
+                break
+
+        if parent_connection.poll():
             frame_valid, frame_number = parent_connection.recv()
         else:
             video_process.terminate()
@@ -416,13 +432,61 @@ def sort_cluster_internally(cluster_features: np.ndarray, cluster_items: list) -
     return [cluster_items[i] for i in path]
 
 
+class SortingOutput:
+    def __init__(self, connection):
+        self.connection = connection
+
+    def write(self, text):
+        self.connection.send(("output", text))
+
+    def flush(self):
+        pass
+
+
+def sort_images_worker(connection, args):
+    sys.stdout = SortingOutput(connection)
+    result = sort_with_tight_clustering(*args)
+    connection.send(("result", result))
+    connection.close()
+
+
 def sort_with_tight_clustering(
     image_files: list[Path],
     similarity_threshold: float | None = None,
     feature_weights: tuple[float, float, float, float, float, float] = DEFAULT_FEATURE_WEIGHTS,
     feature_workers: int = FEATURE_WORKERS,
     reducing_gap: float | None = None,
+    stop_event: threading.Event | None = None,
 ) -> list[tuple[Path, np.ndarray]]:
+    if stop_event is not None:
+        if stop_event.is_set():
+            return []
+        process_context = multiprocessing.get_context("spawn")
+        parent_connection, child_connection = process_context.Pipe(duplex=False)
+        process = process_context.Process(
+            target=sort_images_worker,
+            args=(child_connection, (
+                image_files, similarity_threshold, feature_weights,
+                feature_workers, reducing_gap,
+            )),
+        )
+        process.start()
+        child_connection.close()
+        try:
+            while not stop_event.is_set():
+                if parent_connection.poll(0.05):
+                    kind, value = parent_connection.recv()
+                    if kind == "result":
+                        process.join()
+                        return value
+                    print(value, end="")
+            return []
+        finally:
+            if process.is_alive():
+                process.terminate()
+            process.join()
+            parent_connection.close()
+
     print(f"Loading {len(image_files)} images and extracting visual features...")
     print("(This includes color histograms, spatial layout, texture, brightness, and aspect ratio)\n")
 
@@ -586,7 +650,8 @@ def rename_images(sorted_images: list[tuple[Path, np.ndarray]],
                   parse_dates: bool = False,
                   date_pattern: str = DATE_PATTERN,
                   separator: str = SEPARATOR,
-                  count_start: int = COUNT_START) -> None:
+                  count_start: int = COUNT_START,
+                  stop_event: threading.Event | None = None) -> None:
     folder = sorted_images[0][0].parent
 
     backup_folder = folder / "backup_originals"
@@ -598,12 +663,18 @@ def rename_images(sorted_images: list[tuple[Path, np.ndarray]],
 
     mapping = []
     temp_names = []
+    temp_run_id = uuid.uuid4().hex
 
     print(f"\n{'DRY RUN - ' if dry_run else ''}Renaming images...")
 
     for i, (img_path, _) in enumerate(sorted_images, 1):
+        if stop_event is not None and stop_event.is_set():
+            if not dry_run:
+                for original, temporary in mapping:
+                    (folder / temporary).rename(folder / original)
+            return
         ext = img_path.suffix
-        temp_name = folder / f"__temp_{i:0{padding}d}{ext}"
+        temp_name = folder / f"__temp_{temp_run_id}_{i:0{padding}d}{ext}"
 
         if not dry_run:
             if backup:
@@ -617,6 +688,13 @@ def rename_images(sorted_images: list[tuple[Path, np.ndarray]],
     final_mapping = []
     printed_parsed_date = False
     for i, temp_path in enumerate(temp_names, 1):
+        if stop_event is not None and stop_event.is_set():
+            if not dry_run:
+                for (_, renamed), temporary in zip(final_mapping, temp_names):
+                    (folder / renamed).rename(temporary)
+                for original, temporary in mapping:
+                    (folder / temporary).rename(folder / original)
+            return
         ext = temp_path.suffix
         original_name = mapping[i-1][0]
         date_match = re.search(date_pattern, original_name) if parse_dates else None
@@ -665,7 +743,8 @@ def rename_media(sorted_images: list[tuple[Path, np.ndarray]],
                  parse_dates: bool = False,
                  date_pattern: str = DATE_PATTERN,
                  separator: str = SEPARATOR,
-                 count_start: int = COUNT_START) -> None:
+                 count_start: int = COUNT_START,
+                 stop_event: threading.Event | None = None) -> None:
     folder = Path(folder_path)
     media_files = [
         folder / image_path.stem
@@ -686,6 +765,11 @@ def rename_media(sorted_images: list[tuple[Path, np.ndarray]],
     print(f"\n{'DRY RUN - ' if dry_run else ''}Renaming media...")
 
     for i, media_path in enumerate(media_files, 1):
+        if stop_event is not None and stop_event.is_set():
+            if not dry_run:
+                for original, temporary in zip(media_files, temp_names):
+                    temporary.rename(original)
+            return
         temp_name = (
             folder
             / f"__temp_media_{temp_run_id}_{i:0{padding}d}{media_path.suffix}"
@@ -701,6 +785,13 @@ def rename_media(sorted_images: list[tuple[Path, np.ndarray]],
 
     final_mapping = []
     for i, (media_path, temp_path) in enumerate(zip(media_files, temp_names), 1):
+        if stop_event is not None and stop_event.is_set():
+            if not dry_run:
+                for (_, renamed), temporary in zip(final_mapping, temp_names):
+                    (folder / renamed).rename(temporary)
+                for original, temporary in zip(media_files, temp_names):
+                    temporary.rename(original)
+            return
         date_match = re.search(date_pattern, media_path.name) if parse_dates else None
         date = date_match.group() if date_match else ""
         count = count_start + i - 1
@@ -1284,7 +1375,7 @@ class ImageSorterGUI:
 
     def scan_folder(self, folder, include_videos):
         try:
-            image_files = get_image_files(folder)
+            image_files = get_image_files(folder, self.stop_event)
             video_files = []
             if include_videos:
                 print("Scanning video files...")
@@ -1477,6 +1568,8 @@ class ImageSorterGUI:
         print(message)
 
     def update_status_from_output(self, text, timestamp):
+        if self.stop_event.is_set():
+            return
         if text.strip().endswith("..."):
             self.progress_stage = None
             self.progress_metrics_text.set("— items/s  — s")
@@ -1642,11 +1735,13 @@ class ImageSorterGUI:
                 get_video_image_files(
                     folder, self.stop_event, video_frame_percentage, png_compress_level
                 )
-                if include_videos
+                if include_videos and not self.stop_event.is_set()
                 else []
             )
 
             if self.stop_event.is_set():
+                if video_image_files:
+                    cleanup_video_grabs(folder)
                 self.log("\nSorting stopped.")
                 self.on_complete(False)
                 return
@@ -1664,7 +1759,15 @@ class ImageSorterGUI:
                 feature_weights,
                 feature_workers,
                 reducing_gap,
+                stop_event=self.stop_event,
             )
+
+            if self.stop_event.is_set():
+                if video_image_files:
+                    cleanup_video_grabs(folder)
+                self.log("\nSorting stopped.")
+                self.on_complete(False)
+                return
 
             if video_image_files:
                 rename_media(
@@ -1677,6 +1780,7 @@ class ImageSorterGUI:
                     date_pattern=self.date_pattern.get(),
                     separator=self.separator.get(),
                     count_start=self.count_start.get(),
+                    stop_event=self.stop_event,
                 )
                 cleanup_video_grabs(folder)
             else:
@@ -1689,9 +1793,12 @@ class ImageSorterGUI:
                     date_pattern=self.date_pattern.get(),
                     separator=self.separator.get(),
                     count_start=self.count_start.get(),
+                    stop_event=self.stop_event,
                 )
 
-            self.on_complete(True)
+            if self.stop_event.is_set():
+                self.log("\nSorting stopped.")
+            self.on_complete(not self.stop_event.is_set())
 
         except Exception as e:  # noqa: BLE001
             self.log(f"\n❌ Error: {e}")
@@ -1792,6 +1899,7 @@ class ImageSorterGUI:
     def stop_sorting(self):
         self.stop_event.set()
         self.stop_button.config(state=tk.DISABLED)
+        self.status_text.set("Stopping...")
         self.log("\nStop requested...")
 
 

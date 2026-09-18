@@ -1,3 +1,4 @@
+import threading
 import tkinter as tk
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -34,6 +35,7 @@ def test_progress_transitions_and_log_batches():
     root = tk.Tk()
     root.withdraw()
     gui = main.ImageSorterGUI.__new__(main.ImageSorterGUI)
+    gui.stop_event = threading.Event()
     gui.status_text = tk.StringVar(root)
     gui.progress_percent_text = tk.StringVar(root)
     gui.progress_metrics_text = tk.StringVar(root)
