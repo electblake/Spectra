@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-09-18
+
+### Fixed
+
+- Show completion only after all preceding log messages have been displayed, with completion queued after sorting finishes.
+- Prevent Setup from updating Spectra while the application is running; interactive installs prompt to close it and silent installs stop.
+
 ## [0.6.2] - 2026-09-18
 
 ### Added
@@ -22,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Pass the stop event to image scanning so cancellation also stops folder traversal.
+- Use unique temporary filenames for each image-renaming run to avoid overwriting or colliding with existing temporary images.
 
 ## [0.6.1] - 2026-09-17
 
@@ -227,7 +235,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made `pyproject.toml` the sole source of the application version.
 - Refined application metadata, typing, formatting, and documentation.
 
-[Unreleased]: https://github.com/electblake/Spectra/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/electblake/Spectra/compare/v0.6.3...HEAD
+[0.6.3]: https://github.com/electblake/Spectra/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/electblake/Spectra/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/electblake/Spectra/compare/v0.6.0...v0.6.1
 [0.5.4]: https://github.com/electblake/Spectra/compare/v0.5.3...v0.5.4
