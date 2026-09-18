@@ -1,9 +1,10 @@
-import numpy as np
-import pytest
 import sys
 import threading
 import tkinter as tk
 from unittest.mock import Mock
+
+import numpy as np
+import pytest
 from PIL import Image
 
 from app import config, main
@@ -77,7 +78,7 @@ def test_worker_spinboxes_save_reset_and_dispatch(tmp_path, monkeypatch):
     gui.start_button.invoke()
     assert thread.call_args.kwargs["args"][5] == 5
     assert thread.call_args.kwargs["kwargs"] == {"video_workers": 2}
-    gui.restore_defaults()
+    gui.restore_default_settings()
     assert gui.feature_workers.get() == config.FEATURE_WORKERS
     assert gui.video_workers.get() == config.VIDEO_WORKERS
     for geometry in ("1100x700", "1600x1000"):
@@ -120,9 +121,11 @@ def test_gui_passes_video_worker_count_to_extraction(tmp_path, monkeypatch):
     gui.stop_event = threading.Event()
     gui.log = Mock()
     gui.on_complete = Mock()
-    monkeypatch.setattr(main, "get_image_files", lambda *args: [])
+    scan = Mock(return_value=[])
+    monkeypatch.setattr(main, "get_image_files", scan)
     extraction = Mock(return_value=[])
     monkeypatch.setattr(main, "get_video_image_files", extraction)
     gui.run_sorting(str(tmp_path), 0.5, config.DEFAULT_FEATURE_WEIGHTS, 50, True, 5, 1, None, "",
                     video_workers=3)
     extraction.assert_called_once_with(str(tmp_path), gui.stop_event, 50, 1, video_workers=3)
+    scan.assert_called_once_with(str(tmp_path), gui.stop_event)

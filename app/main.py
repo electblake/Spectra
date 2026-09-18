@@ -1386,7 +1386,7 @@ class ImageSorterGUI:
 
     def scan_folder(self, folder, include_videos):
         try:
-            image_files = get_image_files(folder, self.stop_event)
+            image_files = get_image_files(folder)
             video_files = []
             if include_videos:
                 print("Scanning video files...")
@@ -1747,7 +1747,7 @@ class ImageSorterGUI:
         video_workers=VIDEO_WORKERS,
     ):
         try:
-            image_files = get_image_files(folder)
+            image_files = get_image_files(folder, self.stop_event)
             video_image_files = (
                 get_video_image_files(
                     folder, self.stop_event, video_frame_percentage, png_compress_level,
