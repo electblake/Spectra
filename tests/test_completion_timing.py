@@ -7,10 +7,18 @@ import pytest
 from app import config, main
 
 
-@pytest.mark.parametrize("outcome", ["success", "stopped", "failed"])
-def test_completion_waits_for_all_log_batches(tmp_path, monkeypatch, outcome):
-    monkeypatch.setattr(config, "user_config_path", lambda *args, **kwargs: tmp_path)
+@pytest.fixture(scope="module")
+def tk_root():
     root = tk.Tk()
+    root.withdraw()
+    yield root
+    root.destroy()
+
+
+@pytest.mark.parametrize("outcome", ["success", "stopped", "failed"])
+def test_completion_waits_for_all_log_batches(tmp_path, monkeypatch, outcome, tk_root):
+    monkeypatch.setattr(config, "user_config_path", lambda *args, **kwargs: tmp_path)
+    root = tk.Toplevel(tk_root)
     root.withdraw()
     with monkeypatch.context() as capture:
         capture.setattr(sys, "stdout", sys.stdout)
@@ -50,6 +58,8 @@ def test_completion_waits_for_all_log_batches(tmp_path, monkeypatch, outcome):
             assert gui.status_text.get() == f"Media sorting {outcome} 0/1"
         root.update()
         assert gui.log_redirector.text_queue.empty()
+        for callback in root.tk.call("after", "info"):
+            root.tk.call("after", "cancel", callback)
         root.destroy()
 
 
