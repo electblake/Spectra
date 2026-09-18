@@ -24,19 +24,19 @@ def test_completion_waits_for_all_log_batches(tmp_path, monkeypatch, outcome):
             gui.log(f"Renaming images {index + 1}/1000")
         gui.log("FINAL LOG ENTRY")
 
+        complete_ui = gui._on_complete_ui
+
+        def finish(success):
+            assert gui.log_text.get("1.0", "end-1c").endswith("FINAL LOG ENTRY\n")
+            complete_ui(success)
+            root.quit()
+
+        gui._on_complete_ui = finish
         gui.on_complete(outcome == "success")
-        root.update()
         assert gui.is_processing
         assert gui.start_button.instate(["disabled"])
         gui.show_completion_dialog.assert_not_called()
 
-        def check_completion():
-            if gui.is_processing:
-                root.after(10, check_completion)
-            else:
-                root.quit()
-
-        root.after(10, check_completion)
         root.after(10000, root.quit)
         root.mainloop()
         assert not gui.is_processing
@@ -51,3 +51,25 @@ def test_completion_waits_for_all_log_batches(tmp_path, monkeypatch, outcome):
         root.update()
         assert gui.log_redirector.text_queue.empty()
         root.destroy()
+
+
+def test_completion_is_consumed_once_after_preceding_logs():
+    widget = Mock()
+    gui = main.ImageSorterGUI.__new__(main.ImageSorterGUI)
+    gui.root = Mock()
+    gui.log_redirector = main.TextRedirector(widget, "stdout", Mock())
+    gui._on_complete_ui = Mock()
+    for index in range(1000):
+        gui.log_redirector.write(f"line {index}\n")
+
+    gui.on_complete(True)
+    gui.root.after.assert_not_called()
+    for _ in range(5):
+        gui.log_redirector.write_queued_text()
+        gui._on_complete_ui.assert_not_called()
+    assert widget.insert.call_count == 1000
+    gui.log_redirector.write_queued_text()
+    gui._on_complete_ui.assert_called_once_with(True)
+    gui.log_redirector.write_queued_text()
+    gui._on_complete_ui.assert_called_once_with(True)
+    gui.root.after.assert_not_called()

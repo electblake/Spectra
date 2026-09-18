@@ -1826,12 +1826,9 @@ class ImageSorterGUI:
             self.on_complete(False)
 
     def on_complete(self, success):
-        self.root.after(0, lambda: self._on_complete_ui(success))
+        self.log_redirector.text_queue.put((lambda: self._on_complete_ui(success), None))
 
     def _on_complete_ui(self, success):
-        if not self.log_redirector.text_queue.empty():
-            self.root.after(50, lambda: self._on_complete_ui(success))
-            return
         self.progress.stop()
         self.progress.config(mode="determinate")
         self.start_button.config(state=tk.NORMAL)
@@ -1941,6 +1938,10 @@ class TextRedirector:
             if self.text_queue.empty():
                 break
             text, timestamp = self.text_queue.get_nowait()
+            if callable(text):
+                self.widget.see(tk.END)
+                text()
+                continue
             self.widget.insert(tk.END, text)
             self.status_callback(text, timestamp)
         self.widget.see(tk.END)
