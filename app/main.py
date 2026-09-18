@@ -44,6 +44,7 @@ from app.config import (
     SIMILARITY_THRESHOLD,
     VIDEO_EXTENSIONS,
     VIDEO_FRAME_PERCENTAGE,
+    VIDEO_WORKERS,
     read_user_settings,
     save_user_settings,
 )
@@ -284,6 +285,7 @@ def get_video_image_files(
     stop_event: threading.Event,
     frame_percentage: int = VIDEO_FRAME_PERCENTAGE,
     png_compress_level: int = PNG_COMPRESS_LEVEL,
+    video_workers: int = VIDEO_WORKERS,
 ) -> list[Path]:
     folder_path = Path(folder_path)
     if not folder_path.exists():
@@ -315,86 +317,93 @@ def get_video_image_files(
     print(f"Extracting video frames 0/{len(video_files)}")
 
     process_context = multiprocessing.get_context("spawn")
-    parent_connection, child_connection = process_context.Pipe()
-    video_process = process_context.Process(
-        target=extract_video_frames_worker,
-        args=(child_connection,),
-    )
-    video_process.start()
-    child_connection.close()
-
-    image_files = []
-    for i, video_file_path in enumerate(video_files, 1):
-        if stop_event.is_set():
-            parent_connection.send(None)
-            video_process.join()
-            parent_connection.close()
-            cleanup_video_grabs(folder_path)
-            print("Frame extraction stopped.")
-            return []
-
-        if any(
-            0xD800 <= ord(character) <= 0xDFFF
-            for character in str(video_file_path)
-        ):
-            print(
-                f"  Warning: Skipping invalid Unicode filename: "
-                f"{video_file_path.name!a}"
-            )
-            print(f"Extracting video frames {i}/{len(video_files)}")
-            continue
-
-        image_file_path = video_grabs_folder / f"{video_file_path.name}.png"
-        parent_connection.send(
-            (str(video_file_path), str(image_file_path), frame_percentage, png_compress_level)
+    workers = []
+    for _ in range(min(video_workers, len(video_files))):
+        parent_connection, child_connection = process_context.Pipe()
+        video_process = process_context.Process(
+            target=extract_video_frames_worker,
+            args=(child_connection,),
         )
+        video_process.start()
+        child_connection.close()
+        workers.append({"process": video_process, "connection": parent_connection, "path": None})
 
-        deadline = time.monotonic() + VIDEO_FRAME_PROCESS_TIMEOUT_SECONDS
-        while not parent_connection.poll(0.05):
-            if stop_event.is_set():
-                video_process.terminate()
-                video_process.join()
-                parent_connection.close()
-                cleanup_video_grabs(folder_path)
-                print("Frame extraction stopped.")
-                return []
-            if time.monotonic() >= deadline:
+    next_video = 0
+    completed = 0
+    image_files = []
+    try:
+        while completed < len(video_files) and not stop_event.is_set():
+            for worker in workers:
+                if stop_event.is_set():
+                    break
+                parent_connection = worker["connection"]
+                if worker["path"] is None and next_video < len(video_files):
+                    video_file_path = video_files[next_video]
+                    next_video += 1
+                    if any(
+                        0xD800 <= ord(character) <= 0xDFFF
+                        for character in str(video_file_path)
+                    ):
+                        print(f"  Warning: Skipping invalid Unicode filename: {video_file_path.name!a}")
+                        completed += 1
+                        print(f"Extracting video frames {completed}/{len(video_files)}")
+                        continue
+                    image_file_path = video_grabs_folder / f"{video_file_path.name}.png"
+                    parent_connection.send((
+                        str(video_file_path), str(image_file_path), frame_percentage, png_compress_level,
+                    ))
+                    worker["path"] = video_file_path
+                    worker["image"] = image_file_path
+                    worker["deadline"] = time.monotonic() + VIDEO_FRAME_PROCESS_TIMEOUT_SECONDS
+
+                if worker["path"] is None:
+                    continue
+                if parent_connection.poll():
+                    frame_valid, frame_number = parent_connection.recv()
+                    if frame_valid:
+                        image_files.append(worker["image"])
+                    else:
+                        print(
+                            f"  Warning: Skipping {worker['path'].name}: "
+                            f"could not read frame {frame_number}"
+                        )
+                elif time.monotonic() >= worker["deadline"]:
+                    worker["process"].terminate()
+                    worker["process"].join()
+                    parent_connection.close()
+                    parent_connection, child_connection = process_context.Pipe()
+                    video_process = process_context.Process(
+                        target=extract_video_frames_worker,
+                        args=(child_connection,),
+                    )
+                    video_process.start()
+                    child_connection.close()
+                    worker["connection"] = parent_connection
+                    worker["process"] = video_process
+                    print(
+                        f"  Warning: Skipping {worker['path'].name}: "
+                        f"frame extraction timed out after {VIDEO_FRAME_PROCESS_TIMEOUT_SECONDS} seconds"
+                    )
+                else:
+                    continue
+                worker["path"] = None
+                completed += 1
+                print(f"Extracting video frames {completed}/{len(video_files)}")
+            if completed < len(video_files) and stop_event.wait(0.05):
                 break
+    finally:
+        for worker in workers:
+            if worker["path"] is not None:
+                worker["process"].terminate()
+            else:
+                worker["connection"].send(None)
+            worker["process"].join()
+            worker["connection"].close()
 
-        if parent_connection.poll():
-            frame_valid, frame_number = parent_connection.recv()
-        else:
-            video_process.terminate()
-            video_process.join()
-            parent_connection.close()
-            parent_connection, child_connection = process_context.Pipe()
-            video_process = process_context.Process(
-                target=extract_video_frames_worker,
-                args=(child_connection,),
-            )
-            video_process.start()
-            child_connection.close()
-            print(
-                f"  Warning: Skipping {video_file_path.name}: "
-                f"frame extraction timed out after "
-                f"{VIDEO_FRAME_PROCESS_TIMEOUT_SECONDS} seconds"
-            )
-            print(f"Extracting video frames {i}/{len(video_files)}")
-            continue
-
-        if not frame_valid:
-            print(
-                f"  Warning: Skipping {video_file_path.name}: "
-                f"could not read frame {frame_number}"
-            )
-        else:
-            image_files.append(image_file_path)
-
-        print(f"Extracting video frames {i}/{len(video_files)}")
-
-    parent_connection.send(None)
-    video_process.join()
-    parent_connection.close()
+    if stop_event.is_set():
+        cleanup_video_grabs(folder_path)
+        print("Frame extraction stopped.")
+        return []
 
     return sorted(image_files)
 
@@ -865,6 +874,7 @@ class ImageSorterGUI:
         self.separator = tk.StringVar(value=user_settings["separator"])
         self.count_start = tk.IntVar(value=user_settings["count_start"])
         self.feature_workers = tk.IntVar(value=user_settings["feature_workers"])
+        self.video_workers = tk.IntVar(value=user_settings["video_workers"])
         self.png_compress_level = tk.IntVar(value=user_settings["png_compress_level"])
         self.resize_optimization = tk.StringVar(value=user_settings["resize_optimization"])
         self.is_processing = False
@@ -982,6 +992,7 @@ class ImageSorterGUI:
         self.settings_tab = settings.SettingsTab(
             self.notebook, self.feature_workers, self.png_compress_level,
             self.resize_optimization,
+            self.video_workers,
         )
         self.notebook.add(self.settings_tab, text="Settings")
         self.notebook.add(self.extras_tab, text="Extras")
@@ -1489,6 +1500,7 @@ class ImageSorterGUI:
             self.feature_workers.get(),
             self.png_compress_level.get(),
             self.resize_optimization.get(),
+            self.video_workers.get(),
         )
         self.log("Settings saved.")
 
@@ -1524,6 +1536,7 @@ class ImageSorterGUI:
         self.prefix_folder_level.set(0)
         self.toggle_auto_prefix()
         self.feature_workers.set(FEATURE_WORKERS)
+        self.video_workers.set(VIDEO_WORKERS)
         self.png_compress_level.set(PNG_COMPRESS_LEVEL)
         self.resize_optimization.set(RESIZE_OPTIMIZATION)
         self.toggle_threshold()
@@ -1534,7 +1547,8 @@ class ImageSorterGUI:
 
     def log_settings(self, heading):
         settings = (
-            ("Feature workers", self.feature_workers.get()),
+            ("Image feature workers", self.feature_workers.get()),
+            ("Video frame workers", self.video_workers.get()),
             ("PNG compression level", self.png_compress_level.get()),
             ("Resize optimization", self.resize_optimization.get()),
             ("Media folder", self.folder_path.get()),
@@ -1688,7 +1702,8 @@ class ImageSorterGUI:
         self.log(f"Folder: {folder}")
         self.log(f"Threshold: {threshold_val if threshold_val else 'auto'}")
         self.log(f"Feature weights: {feature_weights}")
-        self.log(f"Feature workers: {self.feature_workers.get()}")
+        self.log(f"Image feature workers: {self.feature_workers.get()}")
+        self.log(f"Video frame workers: {self.video_workers.get()}")
         self.log(f"PNG compression level: {self.png_compress_level.get()}")
         self.log(f"Resize optimization: {self.resize_optimization.get()}")
         self.log(f"Video frame position: {self.video_frame_percentage.get()}%")
@@ -1713,6 +1728,7 @@ class ImageSorterGUI:
                 RESIZE_REDUCING_GAPS[self.resize_optimization.get()],
                 prefix,
             ),
+            kwargs={"video_workers": self.video_workers.get()},
             daemon=True
         )
         thread.start()
@@ -1728,12 +1744,14 @@ class ImageSorterGUI:
         png_compress_level,
         reducing_gap,
         prefix,
+        video_workers=VIDEO_WORKERS,
     ):
         try:
             image_files = get_image_files(folder)
             video_image_files = (
                 get_video_image_files(
-                    folder, self.stop_event, video_frame_percentage, png_compress_level
+                    folder, self.stop_event, video_frame_percentage, png_compress_level,
+                    video_workers=video_workers,
                 )
                 if include_videos and not self.stop_event.is_set()
                 else []

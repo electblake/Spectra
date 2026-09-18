@@ -17,6 +17,7 @@ BRIGHTNESS_WEIGHT = 0.8
 ASPECT_RATIO_WEIGHT = 0.25
 VIDEO_FRAME_PERCENTAGE = 50
 FEATURE_WORKERS = 4
+VIDEO_WORKERS = 1
 PNG_COMPRESS_LEVEL = 1
 RESIZE_OPTIMIZATION = "Default"
 RESIZE_REDUCING_GAPS = {"Default": None, "Low": 3.0, "Medium": 2.0, "High": 1.0}
@@ -53,6 +54,7 @@ def read_user_settings() -> tuple[dict, Path | None]:
     if not settings_path.exists():
         return {
             "feature_workers": FEATURE_WORKERS,
+            "video_workers": VIDEO_WORKERS,
             "png_compress_level": PNG_COMPRESS_LEVEL,
             "resize_optimization": RESIZE_OPTIMIZATION,
             "rgb_weight": RGB_WEIGHT,
@@ -81,6 +83,7 @@ def read_user_settings() -> tuple[dict, Path | None]:
 
     return {
         "feature_workers": settings.getint("performance", "feature_workers"),
+        "video_workers": settings.getint("performance", "video_workers"),
         "png_compress_level": settings.getint("performance", "png_compress_level"),
         "resize_optimization": settings.get("performance", "resize_optimization"),
         "rgb_weight": settings.getfloat("feature_weights", "rgb_weight"),
@@ -166,6 +169,7 @@ def save_user_settings(
     feature_workers,
     png_compress_level,
     resize_optimization,
+    video_workers,
 ) -> None:
     settings_path = user_config_path(
         APP_NAME,
@@ -191,6 +195,7 @@ def save_user_settings(
 
     settings["performance"] = {
         "feature_workers": str(feature_workers),
+        "video_workers": str(video_workers),
         "png_compress_level": str(png_compress_level),
         "resize_optimization": resize_optimization,
     }

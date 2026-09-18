@@ -2,6 +2,7 @@ import csv
 import hashlib
 import shutil
 import threading
+import pytest
 from collections import Counter
 from pathlib import Path
 
@@ -29,7 +30,8 @@ def file_digest(file_path: Path) -> str:
         return hashlib.file_digest(file, "sha256").hexdigest()
 
 
-def test_sort_sample_images_and_videos_together(tmp_path: Path) -> None:
+@pytest.mark.parametrize("video_workers", [1, 3])
+def test_sort_sample_images_and_videos_together(tmp_path: Path, video_workers: int) -> None:
     source_media = sorted(
         file_path
         for file_path in SAMPLES_FOLDER.iterdir()
@@ -62,6 +64,7 @@ def test_sort_sample_images_and_videos_together(tmp_path: Path) -> None:
     video_image_files = get_video_image_files(
         working_folder,
         threading.Event(),
+        video_workers=video_workers,
     )
     visual_media = image_files + video_image_files
 
