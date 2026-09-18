@@ -1343,11 +1343,12 @@ class ImageSorterGUI:
         self.log_text = scrolledtext.ScrolledText(log_frame, wrap=tk.WORD)
         self.log_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-        sys.stdout = TextRedirector(
+        self.log_redirector = TextRedirector(
             self.log_text,
             "stdout",
             self.update_status_from_output,
         )
+        sys.stdout = self.log_redirector
 
         self.log(f"{APP_NAME} v{__version__} loaded.")
         if self.loaded_settings_path is not None:
@@ -1828,6 +1829,9 @@ class ImageSorterGUI:
         self.root.after(0, lambda: self._on_complete_ui(success))
 
     def _on_complete_ui(self, success):
+        if not self.log_redirector.text_queue.empty():
+            self.root.after(50, lambda: self._on_complete_ui(success))
+            return
         self.progress.stop()
         self.progress.config(mode="determinate")
         self.start_button.config(state=tk.NORMAL)
@@ -1947,6 +1951,16 @@ class TextRedirector:
 
 
 def main():
+    if sys.platform == "win32":
+        import ctypes
+        from ctypes import wintypes
+
+        create_mutex = ctypes.windll.kernel32.CreateMutexW
+        create_mutex.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
+        create_mutex.restype = wintypes.HANDLE
+        # Windows keeps this mutex alive until the process exits.
+        create_mutex(None, False, "electblake.Spectra.Running")
+
     root = tk.Tk()
     app = ImageSorterGUI(root)
     if len(sys.argv) > 1:
