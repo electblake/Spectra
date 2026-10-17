@@ -12,6 +12,7 @@ import pytest
 from PIL import Image
 
 from app import config, main
+from app.ui import main_ui
 
 
 @pytest.mark.parametrize("media", [False, True])
@@ -82,7 +83,7 @@ def test_stop_interrupts_analysis_and_reaps_worker(tmp_path, monkeypatch, stage)
     assert path.exists()
 
 
-def test_stop_during_video_wait_cleans_worker_and_grabs(tmp_path, monkeypatch):
+def test_stop_during_video_wait_cleans_worker(tmp_path, monkeypatch):
     (tmp_path / "video.mp4").write_bytes(b"video")
     stop = threading.Event()
     connection = Mock()
@@ -99,23 +100,23 @@ def test_stop_during_video_wait_cleans_worker_and_grabs(tmp_path, monkeypatch):
     context.Process.return_value.terminate.assert_called_once()
     context.Process.return_value.join.assert_called_once()
     connection.close.assert_called_once()
-    assert not (tmp_path / main.VIDEO_GRABS_FOLDER).exists()
+    assert not (tmp_path / ".spectra_video_grabs").exists()
 
 
 def test_gui_does_not_rename_after_analysis_is_stopped(tmp_path, monkeypatch):
-    gui = main.ImageSorterGUI.__new__(main.ImageSorterGUI)
+    gui = main_ui.ImageSorterGUI.__new__(main_ui.ImageSorterGUI)
     gui.stop_event = threading.Event()
     gui.log = Mock()
     gui.on_complete = Mock()
-    monkeypatch.setattr(main, "get_image_files", lambda *args: [Path("image.png")])
+    monkeypatch.setattr(main_ui, "get_image_files", lambda *args: [Path("image.png")])
 
     def stop_analysis(*args, **kwargs):
         gui.stop_event.set()
         return []
 
-    monkeypatch.setattr(main, "sort_with_tight_clustering", stop_analysis)
+    monkeypatch.setattr(main_ui, "sort_with_tight_clustering", stop_analysis)
     rename = Mock()
-    monkeypatch.setattr(main, "rename_images", rename)
+    monkeypatch.setattr(main_ui, "rename_images", rename)
     gui.run_sorting(str(tmp_path), 0.5, main.DEFAULT_FEATURE_WEIGHTS, 50, False, 1, 1, None, "")
     rename.assert_not_called()
     gui.on_complete.assert_called_once_with(False)
@@ -134,10 +135,10 @@ def test_stop_button_returns_gui_to_idle(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "user_config_path", lambda *args, **kwargs: tmp_path)
     stdout, stderr = sys.stdout, sys.stderr
     root = tk.Tk()
-    gui = main.ImageSorterGUI(root)
+    gui = main_ui.ImageSorterGUI(root)
     path = tmp_path / "image.png"
     Image.new("RGB", (100, 100), "red").save(path)
-    monkeypatch.setattr(main, "get_image_files", lambda *args: [path] * 2000)
+    monkeypatch.setattr(main_ui, "get_image_files", lambda *args: [path] * 2000)
     gui.folder_path.set(str(tmp_path))
     gui.include_videos.set(False)
     gui.dry_run.set(True)

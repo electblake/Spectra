@@ -4,7 +4,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from app import config, main
+from app import config
+from app.ui import main_ui
 
 
 @pytest.fixture(scope="module")
@@ -14,7 +15,7 @@ def gui(tmp_path_factory):
     monkeypatch.setattr(config, "user_config_path", lambda *args, **kwargs: tmp_path)
     stdout, stderr = sys.stdout, sys.stderr
     root = tk.Tk()
-    app = main.ImageSorterGUI(root)
+    app = main_ui.ImageSorterGUI(root)
     root.update()
     yield app
     sys.stdout, sys.stderr = stdout, stderr
@@ -32,7 +33,7 @@ def test_manual_prefix_passed_to_sorting(gui, tmp_path, monkeypatch, prefix, sep
     gui.prefix_entry.insert(0, prefix)
     gui.separator.set(separator)
     thread = Mock()
-    monkeypatch.setattr(main.threading, "Thread", thread)
+    monkeypatch.setattr(main_ui.threading, "Thread", thread)
 
     gui.start_sorting()
 

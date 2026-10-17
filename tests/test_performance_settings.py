@@ -9,6 +9,7 @@ from PIL import Image
 
 from app import config, main
 from app.main import calculate_visual_features, sort_with_tight_clustering
+from app.ui import main_ui
 
 
 @pytest.mark.parametrize("optimization", config.RESIZE_REDUCING_GAPS)
@@ -52,7 +53,7 @@ def test_worker_spinboxes_save_reset_and_dispatch(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "user_config_path", lambda *args, **kwargs: tmp_path)
     stdout, stderr = sys.stdout, sys.stderr
     root = tk.Tk()
-    gui = main.ImageSorterGUI(root)
+    gui = main_ui.ImageSorterGUI(root)
     gui.notebook.select(gui.settings_tab)
     root.update()
     performance = gui.settings_tab.feature_workers_spinbox.master
@@ -74,7 +75,7 @@ def test_worker_spinboxes_save_reset_and_dispatch(tmp_path, monkeypatch):
     assert saved["feature_workers"] == 5
     assert saved["video_workers"] == 2
     thread = Mock()
-    monkeypatch.setattr(main.threading, "Thread", thread)
+    monkeypatch.setattr(main_ui.threading, "Thread", thread)
     gui.start_button.invoke()
     assert thread.call_args.kwargs["args"][5] == 5
     assert thread.call_args.kwargs["kwargs"] == {"video_workers": 2}
@@ -117,14 +118,14 @@ def test_video_worker_count_controls_concurrent_processes(tmp_path, monkeypatch,
 
 
 def test_gui_passes_video_worker_count_to_extraction(tmp_path, monkeypatch):
-    gui = main.ImageSorterGUI.__new__(main.ImageSorterGUI)
+    gui = main_ui.ImageSorterGUI.__new__(main_ui.ImageSorterGUI)
     gui.stop_event = threading.Event()
     gui.log = Mock()
     gui.on_complete = Mock()
     scan = Mock(return_value=[])
-    monkeypatch.setattr(main, "get_image_files", scan)
+    monkeypatch.setattr(main_ui, "get_image_files", scan)
     extraction = Mock(return_value=[])
-    monkeypatch.setattr(main, "get_video_image_files", extraction)
+    monkeypatch.setattr(main_ui, "get_video_image_files", extraction)
     gui.run_sorting(str(tmp_path), 0.5, config.DEFAULT_FEATURE_WEIGHTS, 50, True, 5, 1, None, "",
                     video_workers=3)
     extraction.assert_called_once_with(str(tmp_path), gui.stop_event, 50, 1, video_workers=3)

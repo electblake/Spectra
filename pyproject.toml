@@ -14,14 +14,14 @@ dependencies = [
 ]
 
 [project.scripts]
-spectra = "app.main:main"
+spectra = "app.ui.main_ui:main"
 
 [build-system]
 requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["app", "app.tabs"]
+packages = ["app", "app.tabs", "app.workers", "app.ui"]
 
 [tool.setuptools.package-data]
 app = ["../pyproject.toml", "../Spectra.ico"]

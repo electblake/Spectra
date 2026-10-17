@@ -2,10 +2,10 @@ import csv
 import hashlib
 import shutil
 import threading
-import pytest
 from collections import Counter
 from pathlib import Path
 
+import pytest
 from PIL import Image
 
 from app.config import (
@@ -15,8 +15,6 @@ from app.config import (
     VIDEO_EXTENSIONS,
 )
 from app.main import (
-    VIDEO_GRABS_FOLDER,
-    cleanup_video_grabs,
     get_image_files,
     get_video_image_files,
     rename_media,
@@ -54,7 +52,6 @@ def test_gif_frame_is_extracted_and_original_renamed_once(tmp_path: Path, extens
         DEFAULT_FEATURE_WEIGHTS,
     )
     rename_media(sorted_media, working_folder, prefix="sorted_", backup=True)
-    cleanup_video_grabs(working_folder)
 
     assert file_digest(working_folder / f"sorted_1{extension}") == original_digest
     assert file_digest(working_folder / "backup_originals" / gif_path.name) == original_digest
@@ -121,7 +118,6 @@ def test_sort_sample_images_and_videos_together(tmp_path: Path, video_workers: i
         prefix="sorted_",
         backup=True,
     )
-    cleanup_video_grabs(working_folder)
 
     with (working_folder / "rename_mapping.csv").open(
         newline="",
@@ -149,7 +145,7 @@ def test_sort_sample_images_and_videos_together(tmp_path: Path, video_workers: i
         file_path.suffix.lower()
         for file_path in sorted_files
     ) == source_extension_counts
-    assert not (working_folder / VIDEO_GRABS_FOLDER).exists()
+    assert not (working_folder / ".spectra_video_grabs").exists()
 
     backup_folder = working_folder / "backup_originals"
     assert {

@@ -5,7 +5,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from app import config, main
+from app import config
+from app.ui import main_ui
 
 
 @pytest.fixture(scope="module")
@@ -26,7 +27,7 @@ def test_completion_waits_for_all_log_batches(tmp_path, monkeypatch, outcome, tk
     root.withdraw()
     with monkeypatch.context() as capture:
         capture.setattr(sys, "stdout", sys.stdout)
-        gui = main.ImageSorterGUI(root)
+        gui = main_ui.ImageSorterGUI(root)
         gui.is_processing = True
         gui.start_button.config(state=tk.DISABLED)
         gui.show_completion_dialog = Mock()
@@ -69,9 +70,9 @@ def test_completion_waits_for_all_log_batches(tmp_path, monkeypatch, outcome, tk
 
 def test_completion_is_consumed_once_after_preceding_logs():
     widget = Mock()
-    gui = main.ImageSorterGUI.__new__(main.ImageSorterGUI)
+    gui = main_ui.ImageSorterGUI.__new__(main_ui.ImageSorterGUI)
     gui.root = Mock()
-    gui.log_redirector = main.TextRedirector(widget, "stdout", Mock())
+    gui.log_redirector = main_ui.TextRedirector(widget, "stdout", Mock())
     gui._on_complete_ui = Mock()
     for index in range(1000):
         gui.log_redirector.write(f"line {index}\n")

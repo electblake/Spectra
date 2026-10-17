@@ -1,11 +1,11 @@
 import threading
 import tkinter as tk
+from tkinter import ttk
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from tkinter import ttk
-
 from app import main
+from app.ui import main_ui
 
 
 def test_large_discovery_reports_before_finishing(tmp_path, monkeypatch, capsys):
@@ -34,7 +34,7 @@ def test_large_discovery_reports_before_finishing(tmp_path, monkeypatch, capsys)
 def test_progress_transitions_and_log_batches():
     root = tk.Tk()
     root.withdraw()
-    gui = main.ImageSorterGUI.__new__(main.ImageSorterGUI)
+    gui = main_ui.ImageSorterGUI.__new__(main_ui.ImageSorterGUI)
     gui.stop_event = threading.Event()
     gui.status_text = tk.StringVar(root)
     gui.progress_percent_text = tk.StringVar(root)
@@ -65,7 +65,7 @@ def test_progress_transitions_and_log_batches():
     root.destroy()
 
     widget = Mock()
-    redirector = main.TextRedirector(widget, "stdout", Mock())
+    redirector = main_ui.TextRedirector(widget, "stdout", Mock())
     for i in range(33000):
         redirector.write(f"Processing visual features {i + 1}/33000")
     redirector.write_queued_text()
@@ -75,23 +75,23 @@ def test_progress_transitions_and_log_batches():
 
 
 def test_progress_uses_worker_timestamp(monkeypatch):
-    monkeypatch.setattr(main.time, "perf_counter", lambda: 12.5)
+    monkeypatch.setattr(main_ui.time, "perf_counter", lambda: 12.5)
     callback = Mock()
-    redirector = main.TextRedirector(Mock(), "stdout", callback)
+    redirector = main_ui.TextRedirector(Mock(), "stdout", callback)
     redirector.write("Processing visual features 1/10")
-    monkeypatch.setattr(main.time, "perf_counter", lambda: 100.0)
+    monkeypatch.setattr(main_ui.time, "perf_counter", lambda: 100.0)
     redirector.write_queued_text()
     callback.assert_called_once_with("Processing visual features 1/10", 12.5)
 
 
 def test_folder_selection_dispatches_scan(monkeypatch, tmp_path):
-    gui = main.ImageSorterGUI.__new__(main.ImageSorterGUI)
+    gui = main_ui.ImageSorterGUI.__new__(main_ui.ImageSorterGUI)
     gui.folder_path = Mock()
     gui.include_videos = Mock()
     gui.include_videos.get.return_value = True
-    monkeypatch.setattr(main.filedialog, "askdirectory", lambda **kwargs: str(tmp_path))
+    monkeypatch.setattr(main_ui.filedialog, "askdirectory", lambda **kwargs: str(tmp_path))
     thread = Mock()
-    monkeypatch.setattr(main.threading, "Thread", thread)
+    monkeypatch.setattr(main_ui.threading, "Thread", thread)
     gui.browse_folder()
     assert thread.call_args.kwargs["target"] == gui.scan_folder
     assert thread.call_args.kwargs["args"] == (str(tmp_path), True)
