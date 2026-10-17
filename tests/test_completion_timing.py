@@ -1,3 +1,4 @@
+import gc
 import sys
 import tkinter as tk
 from unittest.mock import Mock
@@ -13,6 +14,9 @@ def tk_root():
     root.withdraw()
     yield root
     root.destroy()
+    del root
+    # Release GUI reference cycles before another Tcl interpreter is initialized.
+    gc.collect()
 
 
 @pytest.mark.parametrize("outcome", ["success", "stopped", "failed"])
