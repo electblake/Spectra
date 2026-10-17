@@ -22,7 +22,7 @@ requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["app", "app.tabs", "app.workers", "app.ui"]
+packages = ["app", "app.tabs", "app.workers", "app.ui", "app.image_processors", "app.image_processors.features"]
 
 [tool.setuptools.package-data]
 app = ["../pyproject.toml", "../Spectra.ico"]

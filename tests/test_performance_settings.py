@@ -8,7 +8,8 @@ import pytest
 from PIL import Image
 
 from app import config, main
-from app.main import calculate_visual_features, sort_with_tight_clustering
+from app.image_processors import extract_visual_features
+from app.main import sort_with_tight_clustering
 from app.ui import main_ui
 
 
@@ -21,7 +22,10 @@ def test_parallel_sort_preserves_features_and_order(tmp_path, optimization):
         Image.fromarray(rng.integers(0, 256, (480, 640, 3), dtype=np.uint8)).save(path)
         paths.append(path)
     gap = config.RESIZE_REDUCING_GAPS[optimization]
-    expected = {path: calculate_visual_features(str(path), reducing_gap=gap) for path in paths}
+    expected = {}
+    for path in paths:
+        with Image.open(path) as image:
+            expected[path] = extract_visual_features(image, reducing_gap=gap)
     serial = sort_with_tight_clustering(paths, 0.5, feature_workers=1, reducing_gap=gap)
     parallel = sort_with_tight_clustering(paths, 0.5, feature_workers=4, reducing_gap=gap)
     assert [path for path, _ in parallel] == [path for path, _ in serial]

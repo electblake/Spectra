@@ -28,6 +28,7 @@ from app.config import (
     VIDEO_FRAME_PERCENTAGE,
     VIDEO_WORKERS,
 )
+from app.image_processors import extract_visual_features
 from app.workers.video_frames import (
     prepare_video_frames,
     video_frame_path,
@@ -35,159 +36,21 @@ from app.workers.video_frames import (
     video_frames_worker,
 )
 
+# Bound each video task independently of OpenCV open/read timeouts.
 VIDEO_FRAME_PROCESS_TIMEOUT_SECONDS = 25
 
 
-def extract_color_histogram(img: Image.Image, bins_per_channel: int = 32, reducing_gap: float | None = None) -> np.ndarray:
-    img_rgb = img.convert('RGB')
-    img_rgb = img_rgb.resize((100, 100), Image.Resampling.LANCZOS, reducing_gap=reducing_gap)
-
-    img_array = np.array(img_rgb)
-
-    hist_r = np.histogram(img_array[:, :, 0], bins=bins_per_channel, range=(0, 256))[0]
-    hist_g = np.histogram(img_array[:, :, 1], bins=bins_per_channel, range=(0, 256))[0]
-    hist_b = np.histogram(img_array[:, :, 2], bins=bins_per_channel, range=(0, 256))[0]
-
-    hist = np.concatenate([hist_r, hist_g, hist_b])
-    hist = hist / (hist.sum() + 1e-10)
-
-    return hist
-
-
-def extract_hsv_histogram(img: Image.Image, bins_per_channel: int = 16, reducing_gap: float | None = None) -> np.ndarray:
-    img_hsv = img.convert('HSV')
-    img_hsv = img_hsv.resize((100, 100), Image.Resampling.LANCZOS, reducing_gap=reducing_gap)
-
-    img_array = np.array(img_hsv)
-
-    hist_h = np.histogram(img_array[:, :, 0], bins=bins_per_channel, range=(0, 256))[0]
-    hist_s = np.histogram(img_array[:, :, 1], bins=bins_per_channel, range=(0, 256))[0]
-    hist_v = np.histogram(img_array[:, :, 2], bins=bins_per_channel, range=(0, 256))[0]
-
-    hist = np.concatenate([hist_h, hist_s, hist_v])
-    hist = hist / (hist.sum() + 1e-10)
-
-    return hist
-
-
-def extract_spatial_color_features(img: Image.Image, grid_size: int = 4, reducing_gap: float | None = None) -> np.ndarray:
-    img_rgb = img.convert('RGB')
-    img_rgb = img_rgb.resize((100, 100), Image.Resampling.LANCZOS, reducing_gap=reducing_gap)
-    img_array = np.array(img_rgb)
-
-    h, w = img_array.shape[:2]
-    step_h = h // grid_size
-    step_w = w // grid_size
-
-    features = []
-    for i in range(grid_size):
-        for j in range(grid_size):
-            region = img_array[i*step_h:(i+1)*step_h, j*step_w:(j+1)*step_w]
-            mean_color = region.mean(axis=(0, 1))
-            features.extend(mean_color)
-
-    return np.array(features) / 255.0
-
-
-def extract_texture_features(img: Image.Image, reducing_gap: float | None = None) -> np.ndarray:
-    gray = img.convert('L')
-    gray = gray.resize((100, 100), Image.Resampling.LANCZOS, reducing_gap=reducing_gap)
-    gray_array = np.array(gray, dtype=np.float32)
-
-    grad_x = np.abs(np.diff(gray_array, axis=1))
-    grad_y = np.abs(np.diff(gray_array, axis=0))
-
-    features = [
-        gray_array.std(),
-        grad_x.mean(),
-        grad_y.mean(),
-        grad_x.std(),
-        grad_y.std(),
-    ]
-
-    grid_size = 4
-    h, w = gray_array.shape
-    step_h = h // grid_size
-    step_w = w // grid_size
-
-    for i in range(grid_size):
-        for j in range(grid_size):
-            region = gray_array[i*step_h:(i+1)*step_h, j*step_w:(j+1)*step_w]
-            features.append(region.std())
-
-    return np.array(features) / 255.0
-
-
-def extract_brightness_contrast(img: Image.Image, reducing_gap: float | None = None) -> np.ndarray:
-    gray = img.convert('L')
-    gray = gray.resize((100, 100), Image.Resampling.LANCZOS, reducing_gap=reducing_gap)
-    gray_array = np.array(gray, dtype=np.float32)
-
-    features = [
-        gray_array.mean() / 255.0,
-        gray_array.std() / 255.0,
-        np.median(gray_array) / 255.0,
-        np.percentile(gray_array, 25) / 255.0,
-        np.percentile(gray_array, 75) / 255.0,
-    ]
-
-    return np.array(features)
-
-
-def extract_aspect_ratio(img: Image.Image) -> np.ndarray:
-    width, height = img.size
-    return np.array([np.tanh(np.log(width / height))])
-
-
-def calculate_visual_features(
-    image_path: str,
+def _load_image_features(
+    image_path: Path,
+    *,
     feature_weights: tuple[float, float, float, float, float, float] = DEFAULT_FEATURE_WEIGHTS,
     reducing_gap: float | None = None,
 ) -> np.ndarray:
-    (
-        rgb_weight,
-        hsv_weight,
-        spatial_weight,
-        texture_weight,
-        brightness_weight,
-        aspect_ratio_weight,
-    ) = feature_weights
-
-    try:
-        img = Image.open(image_path)
-
-        weighted_features = []
-        if rgb_weight != 0:
-            weighted_features.append(
-                extract_color_histogram(img, bins_per_channel=32, reducing_gap=reducing_gap) * rgb_weight
-            )
-        if hsv_weight != 0:
-            weighted_features.append(
-                extract_hsv_histogram(img, bins_per_channel=16, reducing_gap=reducing_gap) * hsv_weight
-            )
-        if spatial_weight != 0:
-            weighted_features.append(
-                extract_spatial_color_features(img, grid_size=4, reducing_gap=reducing_gap) * spatial_weight
-            )
-        if texture_weight != 0:
-            weighted_features.append(extract_texture_features(img, reducing_gap=reducing_gap) * texture_weight)
-        if brightness_weight != 0:
-            weighted_features.append(
-                extract_brightness_contrast(img, reducing_gap=reducing_gap) * brightness_weight
-            )
-        if aspect_ratio_weight != 0:
-            weighted_features.append(extract_aspect_ratio(img) * aspect_ratio_weight)
-
-        features = np.concatenate(weighted_features)
-
-        norm = np.linalg.norm(features)
-        if norm > 0:
-            features = features / norm
-
-        return features
-
-    except Exception as e:  # noqa: BLE001
-        raise ValueError(f"Could not process image: {e}")
+    # Keep file ownership in the loader; extractors receive an open Pillow image.
+    with Image.open(image_path) as image:
+        return extract_visual_features(
+            image, feature_weights=feature_weights, reducing_gap=reducing_gap,
+        )
 
 
 def feature_distance(feat1: np.ndarray, feat2: np.ndarray) -> float:
@@ -442,8 +305,8 @@ def sort_with_tight_clustering(
         print(f"Processing visual features 0/{len(image_files)}")
         extracted_features = [
             executor.submit(
-                calculate_visual_features,
-                str(img_path),
+                _load_image_features,
+                img_path,
                 feature_weights=feature_weights,
                 reducing_gap=reducing_gap,
             )
