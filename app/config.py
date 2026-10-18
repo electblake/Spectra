@@ -45,6 +45,33 @@ DEFAULT_FEATURE_WEIGHTS = (
 IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
 VIDEO_EXTENSIONS = {'.mp4', '.avi', '.gif', '.wmv', '.mpeg', '.mov', '.m4v'}
 
+def default_settings() -> dict:
+    return {
+        "feature_workers": FEATURE_WORKERS,
+        "video_workers": VIDEO_WORKERS,
+        "png_compress_level": PNG_COMPRESS_LEVEL,
+        "resize_optimization": RESIZE_OPTIMIZATION,
+        "rgb_weight": RGB_WEIGHT,
+        "hsv_weight": HSV_WEIGHT,
+        "spatial_weight": SPATIAL_WEIGHT,
+        "texture_weight": TEXTURE_WEIGHT,
+        "brightness_weight": BRIGHTNESS_WEIGHT,
+        "aspect_ratio_weight": ASPECT_RATIO_WEIGHT,
+        "video_frame_percentage": VIDEO_FRAME_PERCENTAGE,
+        "dry_run": DRY_RUN,
+        "backup": BACKUP,
+        "similarity_threshold": SIMILARITY_THRESHOLD,
+        "auto_determine": AUTO_DETERMINE,
+        "include_videos": INCLUDE_VIDEOS,
+        "parse_dates": PARSE_DATES,
+        "date_pattern": DATE_PATTERN,
+        "separator": SEPARATOR,
+        "count_start": COUNT_START,
+        "folder_path": FOLDER_PATH,
+        "file_prefix": FILE_PREFIX,
+    }
+
+
 def read_user_settings() -> tuple[dict, Path | None]:
     settings_path = user_config_path(
         APP_NAME,
@@ -52,30 +79,7 @@ def read_user_settings() -> tuple[dict, Path | None]:
     ) / "settings.ini"
 
     if not settings_path.exists():
-        return {
-            "feature_workers": FEATURE_WORKERS,
-            "video_workers": VIDEO_WORKERS,
-            "png_compress_level": PNG_COMPRESS_LEVEL,
-            "resize_optimization": RESIZE_OPTIMIZATION,
-            "rgb_weight": RGB_WEIGHT,
-            "hsv_weight": HSV_WEIGHT,
-            "spatial_weight": SPATIAL_WEIGHT,
-            "texture_weight": TEXTURE_WEIGHT,
-            "brightness_weight": BRIGHTNESS_WEIGHT,
-            "aspect_ratio_weight": ASPECT_RATIO_WEIGHT,
-            "video_frame_percentage": VIDEO_FRAME_PERCENTAGE,
-            "dry_run": DRY_RUN,
-            "backup": BACKUP,
-            "similarity_threshold": SIMILARITY_THRESHOLD,
-            "auto_determine": AUTO_DETERMINE,
-            "include_videos": INCLUDE_VIDEOS,
-            "parse_dates": PARSE_DATES,
-            "date_pattern": DATE_PATTERN,
-            "separator": SEPARATOR,
-            "count_start": COUNT_START,
-            "folder_path": FOLDER_PATH,
-            "file_prefix": FILE_PREFIX,
-        }, None
+        return default_settings(), None
 
     settings = ConfigParser(interpolation=None)
     with settings_path.open(encoding="utf-8") as settings_file:

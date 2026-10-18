@@ -4,7 +4,6 @@ import multiprocessing
 import os
 import re
 import shutil
-import sys
 import threading
 import time
 import uuid
@@ -28,6 +27,7 @@ from app.config import (
     VIDEO_FRAME_PERCENTAGE,
     VIDEO_WORKERS,
 )
+from app.events import Log, Progress, console_report
 from app.image_processors import extract_visual_features
 from app.workers.video_frames import (
     prepare_video_frames,
@@ -57,7 +57,7 @@ def feature_distance(feat1: np.ndarray, feat2: np.ndarray) -> float:
     return np.linalg.norm(feat1 - feat2)
 
 
-def get_image_files(folder_path: str, stop_event: threading.Event | None = None) -> list[Path]:
+def get_image_files(folder_path: str, stop_event: threading.Event | None = None, report=console_report) -> list[Path]:
     folder = Path(folder_path)
 
     if not folder.exists():
@@ -66,7 +66,7 @@ def get_image_files(folder_path: str, stop_event: threading.Event | None = None)
     if not folder.is_dir():
         raise NotADirectoryError(f"Not a directory: {folder_path}")
 
-    print("Scanning image files...")
+    report(Progress("Scanning image files..."))
     image_files = []
     with os.scandir(folder) as entries:
         for i, entry in enumerate(entries, 1):
@@ -75,9 +75,9 @@ def get_image_files(folder_path: str, stop_event: threading.Event | None = None)
             if entry.is_file() and Path(entry.name).suffix.lower() in IMAGE_EXTENSIONS:
                 image_files.append(Path(entry.path))
             if i == 1 or i % 500 == 0:
-                print(f"Scanning image files: {i} entries checked, {len(image_files)} images found...")
-    print(f"Found {len(image_files)} images")
-    print("Scanning image files 1/1")
+                report(Progress(f"Scanning image files: {i} entries checked, {len(image_files)} images found..."))
+    report(Log(f"Found {len(image_files)} images"))
+    report(Progress('Scanning image files', 1, 1))
 
     return sorted(image_files)
 
@@ -87,6 +87,7 @@ def get_video_image_files(
     frame_percentage: int = VIDEO_FRAME_PERCENTAGE,
     png_compress_level: int = PNG_COMPRESS_LEVEL,
     video_workers: int = VIDEO_WORKERS,
+    report=console_report,
 ) -> list[Path]:
     folder_path = Path(folder_path)
     if not folder_path.exists():
@@ -95,7 +96,7 @@ def get_video_image_files(
     if not folder_path.is_dir():
         raise NotADirectoryError(f"Not a directory: {folder_path}")
 
-    print("Scanning video files...")
+    report(Progress("Scanning video files..."))
     video_files = []
     with os.scandir(folder_path) as entries:
         for i, entry in enumerate(entries, 1):
@@ -104,20 +105,20 @@ def get_video_image_files(
             if entry.is_file() and Path(entry.name).suffix.lower() in VIDEO_EXTENSIONS:
                 video_files.append(Path(entry.path))
             if i == 1 or i % 500 == 0:
-                print(f"Scanning video files: {i} entries checked, {len(video_files)} videos found...")
-    print(f"Found {len(video_files)} videos")
-    print("Scanning video files 1/1")
+                report(Progress(f"Scanning video files: {i} entries checked, {len(video_files)} videos found..."))
+    report(Log(f"Found {len(video_files)} videos"))
+    report(Progress('Scanning video files', 1, 1))
 
     if not video_files:
         return []
 
     image_files, video_files = prepare_video_frames(video_files)
-    print(f"Reusing {len(image_files)} cached video frames")
+    report(Log(f"Reusing {len(image_files)} cached video frames"))
     if not video_files:
         return sorted(image_files)
 
-    print(f"Extracting frames from {len(video_files)} videos...")
-    print(f"Extracting video frames 0/{len(video_files)}")
+    report(Progress(f"Extracting frames from {len(video_files)} videos..."))
+    report(Progress('Extracting video frames', 0, len(video_files)))
 
     process_context = multiprocessing.get_context("spawn")
     workers = []
@@ -146,9 +147,9 @@ def get_video_image_files(
                         0xD800 <= ord(character) <= 0xDFFF
                         for character in str(video_file_path)
                     ):
-                        print(f"  Warning: Skipping invalid Unicode filename: {video_file_path.name!a}")
+                        report(Log(f"  Warning: Skipping invalid Unicode filename: {video_file_path.name!a}"))
                         completed += 1
-                        print(f"Extracting video frames {completed}/{len(video_files)}")
+                        report(Progress('Extracting video frames', completed, len(video_files)))
                         continue
                     image_file_path = video_frame_path(video_file_path)
                     parent_connection.send((
@@ -165,10 +166,8 @@ def get_video_image_files(
                     if frame_valid:
                         image_files.append(worker["image"])
                     else:
-                        print(
-                            f"  Warning: Skipping {worker['path'].name}: "
-                            f"could not read frame {frame_number}"
-                        )
+                        report(Log(f"  Warning: Skipping {worker['path'].name}: "
+                            f"could not read frame {frame_number}"))
                 elif time.monotonic() >= worker["deadline"]:
                     worker["process"].terminate()
                     worker["process"].join()
@@ -182,15 +181,13 @@ def get_video_image_files(
                     child_connection.close()
                     worker["connection"] = parent_connection
                     worker["process"] = video_process
-                    print(
-                        f"  Warning: Skipping {worker['path'].name}: "
-                        f"frame extraction timed out after {VIDEO_FRAME_PROCESS_TIMEOUT_SECONDS} seconds"
-                    )
+                    report(Log(f"  Warning: Skipping {worker['path'].name}: "
+                        f"frame extraction timed out after {VIDEO_FRAME_PROCESS_TIMEOUT_SECONDS} seconds"))
                 else:
                     continue
                 worker["path"] = None
                 completed += 1
-                print(f"Extracting video frames {completed}/{len(video_files)}")
+                report(Progress('Extracting video frames', completed, len(video_files)))
             if completed < len(video_files) and stop_event.wait(0.05):
                 break
     finally:
@@ -203,13 +200,13 @@ def get_video_image_files(
             worker["connection"].close()
 
     if stop_event.is_set():
-        print("Frame extraction stopped.")
+        report(Log("Frame extraction stopped."))
         return []
 
     return sorted(image_files)
 
 
-def sort_cluster_internally(cluster_features: np.ndarray, cluster_items: list) -> list:
+def sort_cluster_internally(cluster_features: np.ndarray, cluster_items: list, report=console_report) -> list:
     if len(cluster_items) <= 1:
         return cluster_items
 
@@ -218,7 +215,7 @@ def sort_cluster_internally(cluster_features: np.ndarray, cluster_items: list) -
     visited = [False] * len(cluster_items)
     path = [0]
     visited[0] = True
-    print(f"Sorting images in cluster 1/{len(cluster_items)}")
+    report(Progress('Sorting images in cluster', 1, len(cluster_items)))
 
     for _ in range(len(cluster_items) - 1):
         current = path[-1]
@@ -234,25 +231,15 @@ def sort_cluster_internally(cluster_features: np.ndarray, cluster_items: list) -
             path.append(next_idx)
             visited[next_idx] = True
         if len(path) % 100 == 0 or len(path) == len(cluster_items):
-            print(f"Sorting images in cluster {len(path)}/{len(cluster_items)}")
+            report(Progress('Sorting images in cluster', len(path), len(cluster_items)))
 
     return [cluster_items[i] for i in path]
 
 
-class SortingOutput:
-    def __init__(self, connection):
-        self.connection = connection
-
-    def write(self, text):
-        self.connection.send(("output", text))
-
-    def flush(self):
-        pass
-
-
 def sort_images_worker(connection, args):
-    sys.stdout = SortingOutput(connection)
-    result = sort_with_tight_clustering(*args)
+    result = sort_with_tight_clustering(
+        *args, report=lambda event: connection.send(("event", event)),
+    )
     connection.send(("result", result))
     connection.close()
 
@@ -264,6 +251,7 @@ def sort_with_tight_clustering(
     feature_workers: int = FEATURE_WORKERS,
     reducing_gap: float | None = None,
     stop_event: threading.Event | None = None,
+    report=console_report,
 ) -> list[tuple[Path, np.ndarray]]:
     if stop_event is not None:
         if stop_event.is_set():
@@ -286,7 +274,7 @@ def sort_with_tight_clustering(
                     if kind == "result":
                         process.join()
                         return value
-                    print(value, end="")
+                    report(value)
             return []
         finally:
             if process.is_alive():
@@ -294,15 +282,15 @@ def sort_with_tight_clustering(
             process.join()
             parent_connection.close()
 
-    print(f"Loading {len(image_files)} images and extracting visual features...")
-    print("(This includes color histograms, spatial layout, texture, brightness, and aspect ratio)\n")
+    report(Progress(f"Loading {len(image_files)} images and extracting visual features..."))
+    report(Log("(This includes color histograms, spatial layout, texture, brightness, and aspect ratio)\n"))
 
     images_with_features = []
     features = []
 
     with ThreadPoolExecutor(max_workers=feature_workers) as executor:
-        print("Submitting images for visual feature extraction...")
-        print(f"Processing visual features 0/{len(image_files)}")
+        report(Progress("Submitting images for visual feature extraction..."))
+        report(Progress('Processing visual features', 0, len(image_files)))
         extracted_features = [
             executor.submit(
                 _load_image_features,
@@ -316,14 +304,14 @@ def sort_with_tight_clustering(
             try:
                 feat = future.result()
             except Exception as error:  # noqa: BLE001
-                print(f"  Warning: Skipping {img_path}: {error}")
+                report(Log(f"  Warning: Skipping {img_path}: {error}"))
             else:
                 images_with_features.append((img_path, feat))
                 features.append(feat)
-            print(f"Processing visual features {i}/{len(image_files)}")
+            report(Progress('Processing visual features', i, len(image_files)))
 
     skipped_count = len(image_files) - len(images_with_features)
-    print(f"Visual feature extraction complete: {len(images_with_features)} processed, {skipped_count} skipped")
+    report(Log(f"Visual feature extraction complete: {len(images_with_features)} processed, {skipped_count} skipped"))
 
     if not images_with_features:
         raise ValueError("No valid images found")
@@ -334,26 +322,26 @@ def sort_with_tight_clustering(
     features = np.array(features)
     n_images = len(features)
 
-    print(f"\nCalculating visual similarity between {n_images} images...")
-    print("Calculating visual similarity 0/1")
+    report(Progress(f"\nCalculating visual similarity between {n_images} images..."))
+    report(Progress('Calculating visual similarity', 0, 1))
 
     distance_matrix = cdist(features, features, metric='euclidean')
 
-    print("Calculating visual similarity 1/1")
+    report(Progress('Calculating visual similarity', 1, 1))
 
     if similarity_threshold is None:
-        print(f"Determining similarity threshold 0/{n_images}")
+        report(Progress('Determining similarity threshold', 0, n_images))
         nn_distances = []
         for i in range(n_images):
             positive_distances = distance_matrix[i][distance_matrix[i] > 0]
             if positive_distances.size:
                 nn_distances.append(np.min(positive_distances))
             if (i + 1) % 100 == 0 or i + 1 == n_images:
-                print(f"Determining similarity threshold {i + 1}/{n_images}")
+                report(Progress('Determining similarity threshold', i + 1, n_images))
         similarity_threshold = float(np.percentile(nn_distances, 70))
 
-    print(f"\nClustering with DBSCAN (eps={similarity_threshold:.4f})...")
-    print("Clustering images 0/1")
+    report(Progress(f"\nClustering with DBSCAN (eps={similarity_threshold:.4f})..."))
+    report(Progress('Clustering images', 0, 1))
 
     clustering = DBSCAN(
         eps=similarity_threshold, # type: ignore
@@ -362,7 +350,7 @@ def sort_with_tight_clustering(
     )
 
     cluster_labels = clustering.fit_predict(distance_matrix)
-    print("Clustering images 1/1")
+    report(Progress('Clustering images', 1, 1))
 
     clusters = {}
     for idx, label in enumerate(cluster_labels):
@@ -370,23 +358,23 @@ def sort_with_tight_clustering(
             clusters[label] = []
         clusters[label].append((idx, images_with_features[idx]))
 
-    print(f"  Found {len(clusters)} clusters")
+    report(Log(f"  Found {len(clusters)} clusters"))
     cluster_sizes = sorted([len(items) for items in clusters.values()], reverse=True)
-    print(f"  Cluster sizes: {cluster_sizes[:10]}{'...' if len(cluster_sizes) > 10 else ''}")
+    report(Log(f"  Cluster sizes: {cluster_sizes[:10]}{'...' if len(cluster_sizes) > 10 else ''}"))
 
-    print("\nSorting images within each cluster...")
+    report(Progress("\nSorting images within each cluster..."))
     sorted_clusters = {}
 
     for cluster_number, (label, cluster_items) in enumerate(clusters.items(), 1):
         cluster_indices = [idx for idx, _ in cluster_items]
         cluster_feats = features[cluster_indices]
-        sorted_items = sort_cluster_internally(cluster_feats, cluster_items)
+        sorted_items = sort_cluster_internally(cluster_feats, cluster_items, report)
         sorted_clusters[label] = sorted_items
-        print(f"Sorting clusters {cluster_number}/{len(clusters)}")
+        report(Progress('Sorting clusters', cluster_number, len(clusters)))
 
-    print("  All clusters sorted internally")
+    report(Log("  All clusters sorted internally"))
 
-    print("\nOrdering clusters...")
+    report(Progress("\nOrdering clusters..."))
 
     cluster_representatives = {}
     for label, items in sorted_clusters.items():
@@ -399,7 +387,7 @@ def sort_with_tight_clustering(
 
     if n_clusters == 1:
         ordered_labels = cluster_labels_list
-        print("Ordering clusters 1/1")
+        report(Progress('Ordering clusters', 1, 1))
     else:
         centroid_matrix = np.array([cluster_representatives[label] for label in cluster_labels_list])
         centroid_distances = cdist(centroid_matrix, centroid_matrix, metric='euclidean')
@@ -407,7 +395,7 @@ def sort_with_tight_clustering(
         visited = [False] * n_clusters
         ordered_labels = [cluster_labels_list[0]]
         visited[0] = True
-        print(f"Ordering clusters 1/{n_clusters}")
+        report(Progress('Ordering clusters', 1, n_clusters))
 
         for _ in range(n_clusters - 1):
             current_idx = cluster_labels_list.index(ordered_labels[-1])
@@ -422,9 +410,9 @@ def sort_with_tight_clustering(
             if next_idx != -1:
                 ordered_labels.append(cluster_labels_list[next_idx])
                 visited[next_idx] = True
-                print(f"Ordering clusters {len(ordered_labels)}/{n_clusters}")
+                report(Progress('Ordering clusters', len(ordered_labels), n_clusters))
 
-    print("\nAssembling final sequence...")
+    report(Progress("\nAssembling final sequence..."))
     sorted_images = []
 
     for cluster_idx, label in enumerate(ordered_labels):
@@ -443,9 +431,9 @@ def sort_with_tight_clustering(
 
         for item in cluster_items:
             sorted_images.append(item[1])
-        print(f"Assembling final sequence {cluster_idx + 1}/{len(ordered_labels)}")
+        report(Progress('Assembling final sequence', cluster_idx + 1, len(ordered_labels)))
 
-    print(f"  Final sequence: {len(sorted_images)} images")
+    report(Log(f"  Final sequence: {len(sorted_images)} images"))
 
     return sorted_images
 
@@ -458,13 +446,14 @@ def rename_images(sorted_images: list[tuple[Path, np.ndarray]],
                   date_pattern: str = DATE_PATTERN,
                   separator: str = SEPARATOR,
                   count_start: int = COUNT_START,
-                  stop_event: threading.Event | None = None) -> None:
+                  stop_event: threading.Event | None = None,
+                  report=console_report) -> None:
     folder = sorted_images[0][0].parent
 
     backup_folder = folder / "backup_originals"
     if backup and not dry_run:
         backup_folder.mkdir(exist_ok=True)
-        print(f"\nCreating backup in: {backup_folder}")
+        report(Log(f"\nCreating backup in: {backup_folder}"))
 
     padding = len(str(count_start + len(sorted_images) - 1))
 
@@ -472,7 +461,7 @@ def rename_images(sorted_images: list[tuple[Path, np.ndarray]],
     temp_names = []
     temp_run_id = uuid.uuid4().hex
 
-    print(f"\n{'DRY RUN - ' if dry_run else ''}Renaming images...")
+    report(Progress(f"\n{'DRY RUN - ' if dry_run else ''}Renaming images..."))
 
     for i, (img_path, _) in enumerate(sorted_images, 1):
         if stop_event is not None and stop_event.is_set():
@@ -490,7 +479,7 @@ def rename_images(sorted_images: list[tuple[Path, np.ndarray]],
 
         temp_names.append(temp_name)
         mapping.append((img_path.name, temp_name.name))
-        print(f"Preparing images {i}/{len(sorted_images)}")
+        report(Progress('Preparing images', i, len(sorted_images)))
 
     final_mapping = []
     printed_parsed_date = False
@@ -507,7 +496,7 @@ def rename_images(sorted_images: list[tuple[Path, np.ndarray]],
         date_match = re.search(date_pattern, original_name) if parse_dates else None
         date = date_match.group() if date_match else ""
         if date and not printed_parsed_date:
-            print(f"Parsed date: {date}")
+            report(Log(f"Parsed date: {date}"))
             printed_parsed_date = True
         count = count_start + i - 1
         if date:
@@ -520,28 +509,26 @@ def rename_images(sorted_images: list[tuple[Path, np.ndarray]],
             temp_path.rename(final_path)
 
         final_mapping.append((original_name, new_name))
-        print(f"Renaming images {i}/{len(temp_names)}")
+        report(Progress('Renaming images', i, len(temp_names)))
 
         if i <= 5 or i > len(temp_names) - 5:
-            print(f"  {original_name} → {new_name}")
+            report(Log(f"  {original_name} → {new_name}"))
         elif i == 6:
-            print(f"  ... ({len(temp_names) - 10} more) ...")
+            report(Log(f"  ... ({len(temp_names) - 10} more) ..."))
 
     mapping_file = folder / "rename_mapping.csv"
     if not dry_run:
         with open(mapping_file, 'w', encoding='utf-8') as f:
             f.write("Original Name,New Name\n")
             f.writelines(f'"{orig}","{new}"\n' for orig, new in final_mapping)
-        print(f"\nMapping saved to: {mapping_file}")
+        report(Log(f"\nMapping saved to: {mapping_file}"))
 
     if dry_run:
-        print("\n*** DRY RUN COMPLETE - No files were modified ***")
+        report(Log("\n*** DRY RUN COMPLETE - No files were modified ***"))
     else:
-        print(f"\n✓ Successfully renamed {len(sorted_images)} images!")
+        report(Log(f"\n✓ Successfully renamed {len(sorted_images)} images!"))
         if backup:
-            print(f"✓ Original files backed up to: {backup_folder}")
-
-
+            report(Log(f"✓ Original files backed up to: {backup_folder}"))
 def rename_media(sorted_images: list[tuple[Path, np.ndarray]],
                  folder_path: str | Path,
                  prefix: str = "",
@@ -551,7 +538,8 @@ def rename_media(sorted_images: list[tuple[Path, np.ndarray]],
                  date_pattern: str = DATE_PATTERN,
                  separator: str = SEPARATOR,
                  count_start: int = COUNT_START,
-                 stop_event: threading.Event | None = None) -> None:
+                 stop_event: threading.Event | None = None,
+                  report=console_report) -> None:
     folder = Path(folder_path)
     media_files = [
         video_frame_source(image_path, folder)
@@ -561,13 +549,13 @@ def rename_media(sorted_images: list[tuple[Path, np.ndarray]],
     backup_folder = folder / "backup_originals"
     if backup and not dry_run:
         backup_folder.mkdir(exist_ok=True)
-        print(f"\nCreating backup in: {backup_folder}")
+        report(Log(f"\nCreating backup in: {backup_folder}"))
 
     padding = len(str(count_start + len(media_files) - 1))
     temp_names = []
     temp_run_id = uuid.uuid4().hex
 
-    print(f"\n{'DRY RUN - ' if dry_run else ''}Renaming media...")
+    report(Progress(f"\n{'DRY RUN - ' if dry_run else ''}Renaming media..."))
 
     for i, media_path in enumerate(media_files, 1):
         if stop_event is not None and stop_event.is_set():
@@ -586,7 +574,7 @@ def rename_media(sorted_images: list[tuple[Path, np.ndarray]],
             media_path.rename(temp_name)
 
         temp_names.append(temp_name)
-        print(f"Preparing media {i}/{len(media_files)}")
+        report(Progress('Preparing media', i, len(media_files)))
 
     final_mapping = []
     for i, (media_path, temp_path) in enumerate(zip(media_files, temp_names), 1):
@@ -612,23 +600,23 @@ def rename_media(sorted_images: list[tuple[Path, np.ndarray]],
             temp_path.rename(final_path)
 
         final_mapping.append((media_path.name, new_name))
-        print(f"Renaming media {i}/{len(temp_names)}")
+        report(Progress('Renaming media', i, len(temp_names)))
 
         if i <= 5 or i > len(temp_names) - 5:
-            print(f"  {media_path.name} → {new_name}")
+            report(Log(f"  {media_path.name} → {new_name}"))
         elif i == 6:
-            print(f"  ... ({len(temp_names) - 10} more) ...")
+            report(Log(f"  ... ({len(temp_names) - 10} more) ..."))
 
     mapping_file = folder / "rename_mapping.csv"
     if not dry_run:
         with open(mapping_file, 'w', encoding='utf-8') as f:
             f.write("Original Name,New Name\n")
             f.writelines(f'"{orig}","{new}"\n' for orig, new in final_mapping)
-        print(f"\nMapping saved to: {mapping_file}")
+        report(Log(f"\nMapping saved to: {mapping_file}"))
 
     if dry_run:
-        print("\n*** DRY RUN COMPLETE - No files were modified ***")
+        report(Log("\n*** DRY RUN COMPLETE - No files were modified ***"))
     else:
-        print(f"\n✓ Successfully renamed {len(media_files)} media files!")
+        report(Log(f"\n✓ Successfully renamed {len(media_files)} media files!"))
         if backup:
-            print(f"✓ Original files backed up to: {backup_folder}")
+            report(Log(f"✓ Original files backed up to: {backup_folder}"))

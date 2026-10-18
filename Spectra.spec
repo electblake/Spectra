@@ -1,8 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import os
 import platform
+import sys
 import tomllib
+from pathlib import Path
 
+# Resolve native dependencies from Windows and the selected Python runtime.
+os.environ["PATH"] = os.pathsep.join((
+    str(Path(os.environ["SystemRoot"]) / "System32"),
+    str(Path(sys.base_prefix) / "DLLs"),
+    sys.base_prefix,
+))
 
 with open("pyproject.toml", "rb") as pyproject_file:
     project = tomllib.load(pyproject_file)["project"]
@@ -20,6 +29,7 @@ a = Analysis(
         ("LICENSE", "."),
         ("pyproject.toml", "."),
         ("Spectra.ico", "."),
+        ("app/ui/qml", "app/ui/qml"),
     ],
     hiddenimports=[],
     hookspath=[],

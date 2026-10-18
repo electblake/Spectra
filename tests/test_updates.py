@@ -2,7 +2,7 @@ import platform
 import sys
 from pathlib import Path
 
-from app.tabs.extras import _launcher_command, _setup_asset, _version_tuple
+from app.integrations import _launcher_command, _setup_asset, _version_tuple
 
 
 def test_version_tuple_orders_release_versions() -> None:

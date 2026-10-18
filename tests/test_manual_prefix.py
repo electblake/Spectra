@@ -1,42 +1,25 @@
-import sys
-import tkinter as tk
+import threading
 from unittest.mock import Mock
 
 import pytest
 
-from app import config
-from app.ui import main_ui
-
-
-@pytest.fixture(scope="module")
-def gui(tmp_path_factory):
-    tmp_path = tmp_path_factory.mktemp("prefix_settings")
-    monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(config, "user_config_path", lambda *args, **kwargs: tmp_path)
-    stdout, stderr = sys.stdout, sys.stderr
-    root = tk.Tk()
-    app = main_ui.ImageSorterGUI(root)
-    root.update()
-    yield app
-    sys.stdout, sys.stderr = stdout, stderr
-    root.destroy()
-    monkeypatch.undo()
+from app import application, config, main
 
 
 @pytest.mark.parametrize("prefix", ["manual_", "", "Custom prefix-é_"])
 @pytest.mark.parametrize("separator", ["_", "."])
-def test_manual_prefix_passed_to_sorting(gui, tmp_path, monkeypatch, prefix, separator):
-    folder = tmp_path / "Grand [Parent] 01!" / "Parent-02@" / "Media 03_é"
-    folder.mkdir(parents=True)
-    gui.folder_path.set(str(folder))
-    gui.prefix_entry.delete(0, tk.END)
-    gui.prefix_entry.insert(0, prefix)
-    gui.separator.set(separator)
-    thread = Mock()
-    monkeypatch.setattr(main_ui.threading, "Thread", thread)
-
-    gui.start_sorting()
-
-    assert thread.call_args.kwargs["args"][-1] == prefix
-    assert gui.prefix.get() == prefix
-    thread.return_value.start.assert_called_once()
+def test_manual_prefix_passed_to_rename(tmp_path, monkeypatch, prefix, separator):
+    options = config.default_settings() | {
+        "folder_path": str(tmp_path), "file_prefix": prefix,
+        "separator": separator, "include_videos": False,
+    }
+    request = application.RunRequest(**options)
+    monkeypatch.setattr(main, "get_image_files", Mock(return_value=[tmp_path / "a.png"]))
+    monkeypatch.setattr(main, "sort_with_tight_clustering", Mock(return_value=[("ordered", [])]))
+    rename = Mock()
+    monkeypatch.setattr(main, "rename_images", rename)
+    result = application.run_sorting(request, threading.Event(), Mock())
+    assert rename.call_args.kwargs["prefix"] == prefix
+    assert rename.call_args.kwargs["separator"] == separator
+    assert result.request == request
+    assert not result.stopped

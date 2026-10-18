@@ -13,8 +13,8 @@ scipy>=1.10.0
 # Machine learning and clustering algorithms
 scikit-learn>=1.3.0
 
-# GUI is built-in (tkinter) - comes with Python standard library
-# No additional dependencies needed for GUI
+# Qt Quick / QML frontend
+PySide6>=6.8,<7
 
 # Optional: For building executables
 # Uncomment if you want to build standalone binaries
