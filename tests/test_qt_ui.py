@@ -9,11 +9,51 @@ import pytest
 from PIL import Image
 from PySide6.QtCore import QEventLoop, QObject, Qt, QTimer, QUrl
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QMessageBox, QPushButton
 
-from app import application, config, main
+from app import application, config, integrations, main
 from app.events import Log, Progress
 from app.ui.window import MainWindow
+
+
+def test_extras_update_handoff_finishes_check_before_download(controller, qapp, monkeypatch, tmp_path):
+    import platform
+
+    version = "99.0.0"
+    name = f"Spectra-{version}-{platform.system().lower()}-{platform.machine().lower()}-Setup.exe"
+    asset = {"name": name}
+    release = {"tag_name": f"v{version}", "assets": [asset]}
+    monkeypatch.setattr(integrations, "_latest_release", lambda: release)
+    setup = tmp_path / name
+    setup.write_bytes(b"test installer")
+    download = Mock(return_value=setup)
+    monkeypatch.setattr(integrations, "_download_setup", download)
+    launched = Mock()
+    monkeypatch.setattr("app.ui.controller.os.startfile", launched)
+
+    def accept_update(*args):
+        assert not controller.busy
+        assert controller._thread is None
+        return QMessageBox.StandardButton.Yes
+
+    monkeypatch.setattr(QMessageBox, "question", accept_update)
+    window = MainWindow(controller)
+    window.show()
+    window.tabs.setCurrentIndex(2)
+    check = next(button for button in window.extras.findChildren(QPushButton)
+                 if button.text() == "Check for Updates")
+    QTest.mouseClick(check, Qt.MouseButton.LeftButton)
+    for _ in range(100):
+        QTest.qWait(50)
+        if launched.called and not controller.busy:
+            break
+    download.assert_called_once_with(asset)
+    launched.assert_called_once_with(setup)
+    assert not controller.busy
+    assert controller._thread is None
+    window.close()
+    window.deleteLater()
+    qapp.processEvents()
 
 
 def finish_task(controller):

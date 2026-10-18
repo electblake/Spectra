@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-10-18
+
+### Fixed
+
+- Finished the update-check worker before offering the installer download, preventing overlapping worker lifetimes in Extras.
+
+### Removed
+
+- Removed the Update Examples button and date-pattern examples from the renaming options.
+
 ## [2.2.0] - 2026-10-18
 
 ### Changed
@@ -298,7 +308,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made `pyproject.toml` the sole source of the application version.
 - Refined application metadata, typing, formatting, and documentation.
 
-[Unreleased]: https://github.com/electblake/Spectra/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/electblake/Spectra/compare/v2.2.1...HEAD
+[2.2.1]: https://github.com/electblake/Spectra/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/electblake/Spectra/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/electblake/Spectra/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/electblake/Spectra/compare/v0.6.4...v2.0.0

@@ -42,7 +42,6 @@ class Controller(QObject):
         self._fraction = 0.0
         self._indeterminate = False
         self._metrics = ""
-        self._examples = application.date_examples(self._settings["date_pattern"])
         self._update_status = f"Installed: {config.APP_VERSION}"
         self._stage = None
         self._current = 0
@@ -90,10 +89,6 @@ class Controller(QObject):
         return self._metrics
 
     @Property(str, notify=stateChanged)
-    def examples(self):
-        return self._examples
-
-    @Property(str, notify=stateChanged)
     def updateStatus(self):
         return self._update_status
 
@@ -111,13 +106,7 @@ class Controller(QObject):
     def restoreDefaults(self):
         self._settings = config.default_settings()
         self.settingsChanged.emit()
-        self.updateExamples()
         self.logMessage.emit("Settings reset to defaults.")
-
-    @Slot()
-    def updateExamples(self):
-        self._examples = application.date_examples(self._settings["date_pattern"])
-        self.stateChanged.emit()
 
     @Slot(QUrl)
     def selectFolder(self, url):
@@ -193,8 +182,6 @@ class Controller(QObject):
             newer = integrations._version_tuple(version) > integrations._version_tuple(config.APP_VERSION)
             self._update_status = f"Installed: {config.APP_VERSION} · Latest: {version}"
             self._status = "Update available" if newer else "Up to date"
-            if newer and not self._closing:
-                self.updateAvailable.emit(version)
         elif self._kind == "download":
             self._status = f"Opening {result.name}"
             os.startfile(result)
@@ -212,6 +199,10 @@ class Controller(QObject):
         self.stateChanged.emit()
         if self._closing:
             self.closeReady.emit()
+        elif self._kind == "check":
+            version = self._release["tag_name"].removeprefix("v")
+            if integrations._version_tuple(version) > integrations._version_tuple(config.APP_VERSION):
+                self.updateAvailable.emit(version)
 
     @Slot()
     def stop(self):

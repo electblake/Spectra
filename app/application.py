@@ -1,7 +1,6 @@
 """Sorting use cases and immutable run inputs. No UI dependencies."""
 
 import os
-import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -92,12 +91,3 @@ def scan_folder(folder, include_videos, stop, report):
     message = f"Found {len(images)} images and {videos} videos in {folder}"
     report(Log(message))
     return message
-
-
-def date_examples(pattern):
-    expression = re.compile(pattern)
-    examples = []
-    for filename in ("IMG_2025-01-31.jpg", "scan_2024.12.05.png", "vacation_08-14-2023.jpeg"):
-        match = expression.search(filename)
-        examples.append(f"{filename} → {match.group() if match else 'No match'}")
-    return "\n".join(examples)
