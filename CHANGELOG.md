@@ -9,13 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.0.0] - 2026-10-18
 
+### Added
+
+- Added persistent video frame caching to reuse extracted frames across sorting runs.
+- Added responsive layouts for the sorting, settings, and extras screens.
+- Added regression coverage for image feature extraction, video frame caching, Qt signals, and QML interactions.
+
 ### Changed
 
 - **Breaking:** Replaced the Tkinter interface with a PySide6/QML desktop interface using Qt Quick Controls.
 - Separated sorting workflows and immutable run settings from presentation code.
 - Replaced UI worker threads, timer polling, and stdout parsing with Qt threads and structured progress signals.
 - Moved update and File Explorer integration services into `app.integrations`.
-- Added responsive layouts for the sorting, settings, and extras screens.
+- **Breaking:** Moved the application entry point from `app.main` to `app.ui.main_ui`; updated the `spectra` command and `python -m app` entry points.
+- **Breaking:** Moved image feature extraction into `app.image_processors` and standardized extractors to accept Pillow images, with file loading handled by the application.
+- Moved video frame extraction into `app.workers.video_frames`.
+- Updated package discovery to include the UI, worker, and image processor modules and QML screens.
 
 ### Fixed
 
@@ -26,24 +35,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - Removed the Tkinter tabs and log redirection implementation.
-
-## [1.0.0] - 2026-10-18
-
-### Added
-
-- Added persistent video frame caching to reuse extracted frames across sorting runs.
-- Added regression coverage for image feature extraction and video frame caching.
-
-### Changed
-
-- **Breaking:** Moved the Tk user interface and application entry point from `app.main` to `app.ui.main_ui`; updated the `spectra` command and `python -m app` entry points.
-- **Breaking:** Moved image feature extraction into `app.image_processors` and standardized extractors to accept Pillow images, with file loading handled by the application.
-- Moved video frame extraction into `app.workers.video_frames`.
-- Updated package discovery to include the new UI, worker, and image processor modules.
-
-### Fixed
-
-- Released Tk GUI reference cycles between tests to prevent interpreter lifecycle failures.
 
 ## [0.6.4] - 2026-09-18
 
@@ -284,8 +275,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refined application metadata, typing, formatting, and documentation.
 
 [Unreleased]: https://github.com/electblake/Spectra/compare/v2.0.0...HEAD
-[2.0.0]: https://github.com/electblake/Spectra/compare/v1.0.0...v2.0.0
-[1.0.0]: https://github.com/electblake/Spectra/compare/v0.6.4...v1.0.0
+[2.0.0]: https://github.com/electblake/Spectra/compare/v0.6.4...v2.0.0
 [0.6.4]: https://github.com/electblake/Spectra/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/electblake/Spectra/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/electblake/Spectra/compare/v0.6.1...v0.6.2
