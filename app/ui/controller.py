@@ -6,13 +6,9 @@ from functools import partial
 
 from PySide6.QtCore import Property, QObject, QThread, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtQml import QmlElement, QmlUncreatable
 
 from app import application, config, integrations
 from app.events import Log
-
-QML_IMPORT_NAME = "Spectra"
-QML_IMPORT_MAJOR_VERSION = 1
 
 
 class TaskThread(QThread):
@@ -27,8 +23,6 @@ class TaskThread(QThread):
         self.result.emit(self.operation(self.reported.emit))
 
 
-@QmlElement
-@QmlUncreatable("The application supplies its controller")
 class Controller(QObject):
     settingsChanged = Signal()
     stateChanged = Signal()

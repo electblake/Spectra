@@ -29,7 +29,6 @@ a = Analysis(
         ("LICENSE", "."),
         ("pyproject.toml", "."),
         ("Spectra.ico", "."),
-        ("app/ui/qml", "app/ui/qml"),
     ],
     hiddenimports=[],
     hookspath=[],

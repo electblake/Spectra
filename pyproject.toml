@@ -1,6 +1,6 @@
 [project]
 name = "spectra"
-version = "2.0.0"
+version = "2.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12.10"
@@ -23,10 +23,10 @@ requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["app", "app.workers", "app.ui", "app.ui.qml", "app.image_processors", "app.image_processors.features"]
+packages = ["app", "app.workers", "app.ui", "app.image_processors", "app.image_processors.features"]
 
 [tool.setuptools.package-data]
-app = ["../pyproject.toml", "../Spectra.ico", "ui/qml/*.qml"]
+app = ["../pyproject.toml", "../Spectra.ico"]
 
 [dependency-groups]
 dev = [

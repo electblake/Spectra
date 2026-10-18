@@ -1,3 +1,6 @@
+import csv
+import hashlib
+import shutil
 import threading
 from pathlib import Path
 from unittest.mock import Mock
@@ -6,10 +9,11 @@ import pytest
 from PIL import Image
 from PySide6.QtCore import QEventLoop, QObject, Qt, QTimer, QUrl
 from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QMessageBox
 
 from app import application, config, main
 from app.events import Log, Progress
-from app.ui.main_ui import create_engine
+from app.ui.window import MainWindow
 
 
 def finish_task(controller):
@@ -182,34 +186,189 @@ def test_qt_stop_during_real_analysis(controller, tmp_path, monkeypatch):
     assert list(tmp_path.iterdir()) == [image]
 
 
-def test_qml_load_resize_binding_and_log(controller, qapp):
-    engine = create_engine(controller)
-    warnings = []
-    engine.warnings.connect(lambda errors: warnings.extend(error.toString() for error in errors))
-    window = engine.rootObjects()[0]
+def test_widget_tabs_resize_editing_and_log(controller, qapp):
+    window = MainWindow(controller)
+    window.show()
     for width, height in ((1440, 960), (800, 650)):
-        window.setWidth(width)
-        window.setHeight(height)
+        window.resize(width, height)
         QTest.qWait(100)
         assert window.isVisible()
         start = window.findChild(QObject, "startButton")
         assert start.property("width") > 0
-    controller.setSetting("file_prefix", "qml_test_")
-    assert window.findChild(QObject, "file_prefix").property("text") == "qml_test_"
+    assert window.tabs.count() == 3
+    tab_bar = window.tabs.tabBar()
+    QTest.mouseClick(tab_bar, Qt.MouseButton.LeftButton, pos=tab_bar.tabRect(1).center())
+    assert window.tabs.currentIndex() == 1
+    assert not window.start.isVisible()
+    assert not window.log.isVisible()
+    assert window.save.isVisible()
+    QTest.keyClick(tab_bar, Qt.Key.Key_Tab, Qt.KeyboardModifier.ControlModifier)
+    assert window.tabs.currentIndex() == 2
+    assert not window.save.isVisible()
+    QTest.mouseClick(tab_bar, Qt.MouseButton.LeftButton, pos=tab_bar.tabRect(0).center())
+    assert window.start.isVisible()
+    assert window.log.isVisible()
+    controller.setSetting("file_prefix", "widget_test_")
+    assert window.fields["file_prefix"].text() == "widget_test_"
     controller.restoreDefaults()
-    assert window.findChild(QObject, "file_prefix").property("text") == ""
-    prefix = window.findChild(QObject, "file_prefix")
-    prefix.forceActiveFocus()
-    QTest.keyClick(window, Qt.Key.Key_X)
+    prefix = window.fields["file_prefix"]
+    assert prefix.text() == ""
+    prefix.setFocus()
+    QTest.keyClick(prefix, Qt.Key.Key_X)
     assert controller.settings["file_prefix"] == "x"
     controller.restoreDefaults()
-    assert prefix.property("text") == ""
+    assert prefix.text() == ""
     controller.clearLog.emit()
     controller.logMessage.emit("<literal text>")
-    assert window.findChild(QObject, "activityLog").property("text") == "<literal text>"
+    assert window.log.toPlainText() == "<literal text>"
     controller.completed.emit(True)
     QTest.qWait(50)
-    assert not warnings
+    dialog = window.findChild(QMessageBox)
+    assert dialog.windowTitle() == "Dry Run Complete"
+    QTest.keyClick(dialog, Qt.Key.Key_Escape)
+    assert not dialog.isVisible()
     window.close()
-    engine.deleteLater()
+    window.deleteLater()
+    qapp.processEvents()
+
+
+def test_widget_settings_sync_without_feedback(controller, qapp):
+    window = MainWindow(controller)
+    changes = Mock()
+    controller.settingsChanged.connect(changes)
+    controller.setSetting("rgb_weight", 1.25)
+    assert window.fields["rgb_weight"].value() == 1.25
+    changes.assert_called_once()
+    window.fields["feature_workers"].setValue(6)
+    assert controller.settings["feature_workers"] == 6
+    controller.setSetting("parse_dates", True)
+    assert window.fields["date_pattern"].isEnabled()
+    controller.setSetting("auto_determine", True)
+    assert not window.fields["similarity_threshold"].isEnabled()
+    controller.setSetting("include_videos", False)
+    assert not window.fields["video_frame_percentage"].isEnabled()
+    controller.restoreDefaults()
+    assert window.fields["feature_workers"].value() == config.FEATURE_WORKERS
+    window.deleteLater()
+    qapp.processEvents()
+
+
+def test_widget_start_confirmation_and_busy_controls(controller, qapp, monkeypatch):
+    window = MainWindow(controller)
+    controller.setSetting("folder_path", "media")
+    controller.setSetting("dry_run", False)
+    start = Mock()
+    monkeypatch.setattr(controller, "start", start)
+    monkeypatch.setattr(QMessageBox, "question", Mock(return_value=QMessageBox.StandardButton.No))
+    window.start.click()
+    start.assert_not_called()
+    monkeypatch.setattr(QMessageBox, "question", Mock(return_value=QMessageBox.StandardButton.Yes))
+    window.start.click()
+    start.assert_called_once()
+    controller._busy = True
+    controller._kind = "sort"
+    controller.stateChanged.emit()
+    assert not window.start.isEnabled()
+    assert window.stop.isEnabled()
+    assert not window.fields["folder_path"].isEnabled()
+    assert not window.fields["feature_workers"].isEnabled()
+    window.stop.click()
+    assert controller.stopping
+    assert not window.stop.isEnabled()
+    window.deleteLater()
+    qapp.processEvents()
+
+
+def test_project_samples_through_widget_preview_and_rename(controller, qapp, tmp_path):
+    source = Path(__file__).resolve().parents[1] / "samples"
+    media = sorted(path for path in source.iterdir()
+                   if path.suffix.lower() in config.IMAGE_EXTENSIONS | config.VIDEO_EXTENSIONS)
+    images = sum(path.suffix.lower() in config.IMAGE_EXTENSIONS for path in media)
+    videos = len(media) - images
+    assert images > 0 and videos > 0
+
+    def digest(path):
+        with path.open("rb") as stream:
+            return hashlib.file_digest(stream, "sha256").hexdigest()
+
+    originals = {path.name: digest(path) for path in media}
+    working = tmp_path / "sample-copy"
+    working.mkdir()
+    for path in media:
+        shutil.copy2(path, working / path.name)
+
+    window = MainWindow(controller)
+    window.show()
+    QTest.qWait(100)
+    QTest.keyClicks(window.fields["folder_path"], str(working))
+    QTest.keyClicks(window.fields["file_prefix"], "qt_sample_")
+    tab_bar = window.tabs.tabBar()
+    QTest.mouseClick(tab_bar, Qt.MouseButton.LeftButton, pos=tab_bar.tabRect(1).center())
+    workers = window.fields["video_workers"]
+    workers.setFocus()
+    QTest.keyClick(workers, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+    QTest.keyClicks(workers, "3")
+    QTest.keyClick(workers, Qt.Key.Key_Tab)
+    assert controller.settings["video_workers"] == 3
+    QTest.mouseClick(tab_bar, Qt.MouseButton.LeftButton, pos=tab_bar.tabRect(0).center())
+    assert window.fields["dry_run"].isChecked()
+    assert window.fields["backup"].isChecked()
+    assert window.fields["include_videos"].isChecked()
+
+    QTest.mouseClick(window.start, Qt.MouseButton.LeftButton)
+    assert not window.start.isEnabled()
+    assert window.stop.isEnabled()
+    finish_task(controller)
+    assert window.status.text() == "Sorting complete"
+    assert window.progress.value() == 100
+    assert {path.name: digest(path) for path in working.iterdir()} == originals
+    preview_log = window.log.toPlainText()
+    assert f"{len(media)} processed, 0 skipped" in preview_log
+    assert "qt_sample_" in preview_log
+    assert "DRY RUN COMPLETE - No files were modified" in preview_log
+    dialog = window.findChild(QMessageBox)
+    assert dialog.windowTitle() == "Dry Run Complete"
+    QTest.mouseClick(dialog.button(QMessageBox.StandardButton.Close), Qt.MouseButton.LeftButton)
+    QTest.qWait(50)
+
+    QTest.mouseClick(window.fields["dry_run"], Qt.MouseButton.LeftButton)
+    assert not controller.settings["dry_run"]
+
+    def confirm(button):
+        dialog = qapp.activeModalWidget()
+        assert isinstance(dialog, QMessageBox)
+        assert dialog.windowTitle() == "Confirm Rename"
+        QTest.mouseClick(dialog.button(button), Qt.MouseButton.LeftButton)
+
+    QTimer.singleShot(0, lambda: confirm(QMessageBox.StandardButton.No))
+    QTest.mouseClick(window.start, Qt.MouseButton.LeftButton)
+    assert not controller.busy
+    assert {path.name: digest(path) for path in working.iterdir()} == originals
+
+    QTimer.singleShot(0, lambda: confirm(QMessageBox.StandardButton.Yes))
+    QTest.mouseClick(window.start, Qt.MouseButton.LeftButton)
+    finish_task(controller)
+    assert window.status.text() == "Sorting complete"
+    assert window.progress.value() == 100
+    assert window.start.isEnabled()
+    assert not window.stop.isEnabled()
+    dialog = window.findChild(QMessageBox)
+    assert dialog.windowTitle() == "Sorting Complete"
+    QTest.mouseClick(dialog.button(QMessageBox.StandardButton.Close), Qt.MouseButton.LeftButton)
+
+    with (working / "rename_mapping.csv").open(newline="", encoding="utf-8") as stream:
+        mapping = list(csv.DictReader(stream))
+    assert len(mapping) == len(media)
+    assert {row["Original Name"] for row in mapping} == set(originals)
+    assert sorted(int(Path(row["New Name"]).stem.removeprefix("qt_sample_"))
+                  for row in mapping) == list(range(1, len(media) + 1))
+    for row in mapping:
+        assert digest(working / row["New Name"]) == originals[row["Original Name"]]
+    assert {path.name: digest(path) for path in (working / "backup_originals").iterdir()} == originals
+    assert {path.name: digest(path) for path in media} == originals
+    assert not list(working.glob("__temp_media_*"))
+    assert not (working / ".spectra_video_grabs").exists()
+    print(f"Qt UI verified: {images} images + {videos} videos; preview, cancellation, rename, mapping, backups, and original hashes passed")
+    window.close()
+    window.deleteLater()
     qapp.processEvents()

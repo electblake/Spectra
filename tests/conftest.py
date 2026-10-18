@@ -1,6 +1,5 @@
 import pytest
-from PySide6.QtGui import QGuiApplication
-from PySide6.QtQuickControls2 import QQuickStyle
+from PySide6.QtWidgets import QApplication
 
 from app import config
 from app.ui.controller import Controller
@@ -14,8 +13,7 @@ def isolated_video_cache(tmp_path, monkeypatch):
 
 @pytest.fixture(scope="session")
 def qapp():
-    QQuickStyle.setStyle("Fusion")
-    app = QGuiApplication([])
+    app = QApplication([])
     app.setQuitOnLastWindowClosed(False)
     return app
 

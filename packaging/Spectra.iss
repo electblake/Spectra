@@ -43,7 +43,6 @@ SetupLogging=yes
 Source: "..\build\bootstrap\uv\uv.exe"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\build\bootstrap\LICENSE-*"; DestDir: "{app}\tools\licenses"; Flags: ignoreversion
 Source: "..\app\*.py"; DestDir: "{app}\app\app"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\app\ui\qml\*.qml"; DestDir: "{app}\app\app\ui\qml"; Flags: ignoreversion
 Source: "..\Spectra.ico"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\pyproject.toml"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}\app"; Flags: ignoreversion
@@ -51,6 +50,7 @@ Source: "..\LICENSE"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "install-runtime.cmd"; DestDir: "{app}"; Flags: ignoreversion
 
 [InstallDelete]
+Type: filesandordirs; Name: "{app}\app\app\ui\qml"
 Type: filesandordirs; Name: "{app}\_internal"
 Type: files; Name: "{app}\Spectra-*-windows-amd64.exe"
 

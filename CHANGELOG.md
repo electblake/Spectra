@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-18
+
+### Added
+
+- Added UI-driven regression coverage using the project's image and video samples, including preview, rename confirmation, mapping, backups, and file integrity checks.
+
+### Changed
+
+- Replaced the QML presentation with standard PySide6 Widgets and a `QTabWidget`, using the platform's default controls and styling.
+- Organized Sort & Rename, Settings, and Extras as full application pages; kept sorting actions and the activity log on the sorting page.
+- Moved feature weights and video processing options into Settings, with numeric spin boxes for precise values.
+
+### Removed
+
+- Removed QML components and packaging entries; Setup now removes obsolete QML files during upgrades.
+
 ## [2.0.0] - 2026-10-18
 
 ### Added
@@ -274,7 +290,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made `pyproject.toml` the sole source of the application version.
 - Refined application metadata, typing, formatting, and documentation.
 
-[Unreleased]: https://github.com/electblake/Spectra/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/electblake/Spectra/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/electblake/Spectra/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/electblake/Spectra/compare/v0.6.4...v2.0.0
 [0.6.4]: https://github.com/electblake/Spectra/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/electblake/Spectra/compare/v0.6.2...v0.6.3
