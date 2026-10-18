@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-10-18
+
+### Added
+
+- Added an update dialog with repository-check status, download progress, and separate Download Update and Quit and Install actions.
+- Added a configurable preferences folder with a folder picker and Open Config Folder action; saved folder choices persist across launches.
+
+### Changed
+
+- Used Inno Setup's built-in application mutex check to block installation while Spectra is running; launched requested installers after the Qt event loop exits.
+- Arranged Settings as a two-column form with labels beside their inputs.
+
 ## [2.2.1] - 2026-10-18
 
 ### Fixed

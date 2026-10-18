@@ -1,8 +1,8 @@
 """Qt adapter: application requests in, queued events out."""
 
-import os
 import threading
 from functools import partial
+from pathlib import Path
 
 from PySide6.QtCore import Property, QObject, QThread, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices
@@ -29,12 +29,12 @@ class Controller(QObject):
     logMessage = Signal(str)
     clearLog = Signal()
     completed = Signal(bool)
-    updateAvailable = Signal(str)
     closeReady = Signal()
 
     def __init__(self, folder=None):
         super().__init__()
         self._settings, self.settings_path = config.read_user_settings()
+        self._config_folder = str(config.settings_file().parent)
         if folder is not None:
             self._settings["folder_path"] = folder
         self._busy = False
@@ -51,10 +51,29 @@ class Controller(QObject):
         self._completed_request = None
         self._release = None
         self._kind = "idle"
+        self.update_ready = False
+        self.update_available = False
+        self.installer_path = None
+        self.install_requested = False
 
     @Property("QVariantMap", notify=settingsChanged)
     def settings(self):
         return self._settings.copy()
+
+    @Property(str, notify=settingsChanged)
+    def configFolder(self):
+        return self._config_folder
+
+    @Slot(str)
+    def setConfigFolder(self, folder):
+        self._config_folder = folder
+        self.settingsChanged.emit()
+
+    @Slot()
+    def openConfigFolder(self):
+        folder = Path(self._config_folder).expanduser().resolve()
+        folder.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
 
     @Property(str, constant=True)
     def title(self):
@@ -99,7 +118,10 @@ class Controller(QObject):
 
     @Slot()
     def saveSettings(self):
-        config.save_user_settings(**self._settings)
+        config.save_user_settings(config_folder=self._config_folder, **self._settings)
+        self.settings_path = config.settings_file()
+        self._config_folder = str(self.settings_path.parent)
+        self.settingsChanged.emit()
         self.logMessage.emit("Settings saved.")
 
     @Slot()
@@ -180,11 +202,14 @@ class Controller(QObject):
             self._release = result
             version = result["tag_name"].removeprefix("v")
             newer = integrations._version_tuple(version) > integrations._version_tuple(config.APP_VERSION)
+            self.update_available = newer
             self._update_status = f"Installed: {config.APP_VERSION} · Latest: {version}"
             self._status = "Update available" if newer else "Up to date"
         elif self._kind == "download":
-            self._status = f"Opening {result.name}"
-            os.startfile(result)
+            self.installer_path = result
+            self.update_ready = True
+            self._fraction = 1.0
+            self._status = "Download complete. Quit and install when ready."
         elif self._kind == "install":
             self._status = "Installed in File Explorer"
         self.stateChanged.emit()
@@ -199,10 +224,6 @@ class Controller(QObject):
         self.stateChanged.emit()
         if self._closing:
             self.closeReady.emit()
-        elif self._kind == "check":
-            version = self._release["tag_name"].removeprefix("v")
-            if integrations._version_tuple(version) > integrations._version_tuple(config.APP_VERSION):
-                self.updateAvailable.emit(version)
 
     @Slot()
     def stop(self):
@@ -228,13 +249,18 @@ class Controller(QObject):
 
     @Slot()
     def checkUpdates(self):
+        self.update_available = False
+        self.update_ready = False
+        self.installer_path = None
         self._launch("check", lambda report: integrations._latest_release())
+        self._status = "Checking GitHub for a new version..."
+        self.stateChanged.emit()
 
     @Slot()
     def downloadUpdate(self):
         version = self._release["tag_name"].removeprefix("v")
         asset = integrations._setup_asset(self._release, version)
-        self._launch("download", lambda report: integrations._download_setup(asset))
+        self._launch("download", lambda report: integrations._download_setup(asset, report))
 
     @Slot()
     def installExplorer(self):
@@ -243,3 +269,8 @@ class Controller(QObject):
     @Slot()
     def viewReleases(self):
         QDesktopServices.openUrl(QUrl(integrations.RELEASES_URL))
+
+    @Slot()
+    def quitAndInstall(self):
+        self.install_requested = True
+        self.closeReady.emit()

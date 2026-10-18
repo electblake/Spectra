@@ -37,6 +37,8 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 CloseApplications=yes
+RestartApplications=no
+UsePreviousAppDir=yes
 SetupLogging=yes
 
 [Files]
@@ -82,21 +84,6 @@ Type: files; Name: "{app}\app\uv.lock"
 var
   DependencyExitCode: Integer;
   DependencyLog: TNewMemo;
-
-function InitializeSetup: Boolean;
-begin
-  Result := False;
-  while CheckForMutexes('electblake.Spectra.Running') do begin
-    if WizardSilent then
-      Exit;
-    if SuppressibleTaskDialogMsgBox('Spectra is running',
-      'Please close all Spectra windows before continuing setup.'#13#10#13#10 +
-      'Have you closed Spectra?', mbConfirmation,
-      MB_YESNO, ['&Yes, I''ve closed Spectra', '&No, quit installer'], 0, IDNO) <> IDYES then
-      Exit;
-  end;
-  Result := True;
-end;
 
 procedure InitializeWizard;
 begin

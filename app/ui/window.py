@@ -52,7 +52,6 @@ class MainWindow(QMainWindow):
         controller.logMessage.connect(self.log.appendPlainText)
         controller.clearLog.connect(self.log.clear)
         controller.completed.connect(self._show_completion)
-        controller.updateAvailable.connect(self._confirm_update)
         controller.closeReady.connect(self.close)
         self._sync_settings()
 
@@ -181,39 +180,42 @@ class MainWindow(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
         self.settings_options = QWidget()
-        options = QVBoxLayout(self.settings_options)
-        video = QGroupBox("Video")
-        form = QFormLayout(video)
+        form = QFormLayout(self.settings_options)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)
         form.addRow("Frame position (%):", self._number("video_frame_percentage", "Frame position (%)", 0, 100))
-        hint = QLabel("Applies to newly extracted frames. Existing cached frames are reused.")
-        hint.setWordWrap(True)
-        form.addRow(hint)
-        options.addWidget(video)
-
-        performance = QGroupBox("Performance")
-        form = QFormLayout(performance)
+        self.fields["video_frame_percentage"].setToolTip("Applies to newly extracted frames. Existing cached frames are reused.")
         form.addRow("Image feature workers:", self._number("feature_workers", "Image feature workers", 1, 64))
         form.addRow("Video frame workers:", self._number("video_workers", "Video frame workers", 1, 64))
-        options.addWidget(performance)
-
-        image = QGroupBox("Image processing")
-        form = QFormLayout(image)
         form.addRow("PNG compression level:", self._number("png_compress_level", "PNG compression level", 0, 9))
         resize = QComboBox()
         resize.addItems(["Default", "Low", "Medium", "High"])
         resize.textActivated.connect(lambda value: self.controller.setSetting("resize_optimization", value))
         self._register("resize_optimization", "Resize optimization", resize)
+        resize.setToolTip("Analysis remains 100 × 100 pixels. Stronger optimization is faster and may change similarity results; originals are unchanged.")
         form.addRow("Resize optimization:", resize)
-        hint = QLabel("Analysis remains 100 × 100 pixels. Stronger optimization is faster and may change similarity results; originals are unchanged.")
-        hint.setWordWrap(True)
-        form.addRow(hint)
-        options.addWidget(image)
-        options.addStretch()
+
+        config_row = QHBoxLayout()
+        self.config_path = QLineEdit(self.controller.configFolder)
+        self.config_path.setObjectName("configPath")
+        self.config_path.setAccessibleName("Config path")
+        self.config_path.textEdited.connect(self.controller.setConfigFolder)
+        config_row.addWidget(self.config_path)
+        browse_config = QPushButton("Browse…")
+        browse_config.setObjectName("browseConfigFolder")
+        browse_config.clicked.connect(self._browse_config)
+        config_row.addWidget(browse_config)
+        open_config = QPushButton("Open Config Folder")
+        open_config.setObjectName("openConfigFolder")
+        open_config.clicked.connect(self.controller.openConfigFolder)
+        config_row.addWidget(open_config)
+        config_label = QLabel("&Config path:")
+        config_label.setBuddy(self.config_path)
+        form.addRow(config_label, config_row)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(self.settings_options)
         layout.addWidget(scroll)
-        layout.addWidget(QLabel("Save Settings keeps options from all tabs for the next launch."))
+        layout.addWidget(QLabel("Save Settings stores options from all tabs in the selected config folder."))
         actions = QHBoxLayout()
         self.save = QPushButton("Save Settings")
         self.save.clicked.connect(self.controller.saveSettings)
@@ -242,7 +244,7 @@ class MainWindow(QMainWindow):
         self.update_status = QLabel()
         form.addWidget(self.update_status)
         check = QPushButton("Check for Updates")
-        check.clicked.connect(self.controller.checkUpdates)
+        check.clicked.connect(self._check_updates)
         releases = QPushButton("View Releases")
         releases.clicked.connect(self.controller.viewReleases)
         form.addWidget(check, alignment=Qt.AlignmentFlag.AlignLeft)
@@ -264,6 +266,8 @@ class MainWindow(QMainWindow):
                     field.setCurrentText(value)
                 else:
                     field.setValue(value)
+        if self.config_path.text() != self.controller.configFolder:
+            self.config_path.setText(self.controller.configFolder)
         self._sync_state()
 
     def _sync_state(self):
@@ -287,6 +291,11 @@ class MainWindow(QMainWindow):
         folder = QFileDialog.getExistingDirectory(self, "Select Media Folder", self.controller.settings["folder_path"])
         if folder:
             self.controller.selectFolder(QUrl.fromLocalFile(folder))
+
+    def _browse_config(self):
+        folder = QFileDialog.getExistingDirectory(self, "Select Config Folder", self.config_path.text())
+        if folder:
+            self.controller.setConfigFolder(folder)
 
     def _start(self):
         settings = self.controller.settings
@@ -312,10 +321,12 @@ class MainWindow(QMainWindow):
         quit_button.clicked.connect(self.close)
         dialog.open()
 
-    def _confirm_update(self, version):
-        answer = QMessageBox.question(self, "Update Available", f"Spectra {version} is available. Download and open Setup?")
-        if answer == QMessageBox.StandardButton.Yes:
-            self.controller.downloadUpdate()
+    def _check_updates(self):
+        from app.ui.update_dialog import UpdateDialog
+
+        self.update_dialog = UpdateDialog(self.controller, self)
+        self.update_dialog.open()
+        self.controller.checkUpdates()
 
     def closeEvent(self, event):
         if self.controller.requestClose():

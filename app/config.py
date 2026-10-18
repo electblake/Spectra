@@ -101,7 +101,10 @@ SETTINGS_KEYS = {
 
 
 def settings_file() -> Path:
-    return user_config_path(APP_NAME, appauthor=False, roaming=True) / "Spectra.ini"
+    default_folder = user_config_path(APP_NAME, appauthor=False, roaming=True)
+    locations = QSettings(str(default_folder / "locations.ini"), QSettings.Format.IniFormat)
+    locations.setFallbacksEnabled(False)
+    return Path(locations.value("paths/config_folder", str(default_folder), type=str)) / "Spectra.ini"
 
 
 def _settings_store() -> QSettings:
@@ -126,12 +129,21 @@ def read_user_settings() -> tuple[dict, Path | None]:
     return values, path
 
 
-def save_user_settings(**values) -> None:
-    settings_file().parent.mkdir(parents=True, exist_ok=True)
-    settings = _settings_store()
+def save_user_settings(*, config_folder=None, **values) -> None:
+    folder = Path(config_folder).expanduser().resolve() if config_folder is not None else settings_file().parent
+    folder.mkdir(parents=True, exist_ok=True)
+    settings = QSettings(str(folder / "Spectra.ini"), QSettings.Format.IniFormat)
+    settings.setFallbacksEnabled(False)
     for key, setting_path in SETTINGS_KEYS.items():
         settings.setValue(setting_path, values[key])
     settings.sync()
+    if config_folder is not None:
+        default_folder = user_config_path(APP_NAME, appauthor=False, roaming=True)
+        default_folder.mkdir(parents=True, exist_ok=True)
+        locations = QSettings(str(default_folder / "locations.ini"), QSettings.Format.IniFormat)
+        locations.setFallbacksEnabled(False)
+        locations.setValue("paths/config_folder", str(folder))
+        locations.sync()
 
 
 def _read_legacy_settings(settings_path: Path) -> dict:

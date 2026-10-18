@@ -1,6 +1,5 @@
 import json
 import platform
-import shutil
 import sys
 from pathlib import Path
 from urllib.request import Request, urlopen
@@ -8,6 +7,7 @@ from urllib.request import Request, urlopen
 from platformdirs import user_cache_path
 
 from app.config import APP_NAME, APP_VERSION
+from app.events import Progress
 
 LATEST_RELEASE_URL = "https://api.github.com/repos/electblake/Spectra/releases/latest"
 RELEASES_URL = "https://github.com/electblake/Spectra/releases"
@@ -53,7 +53,7 @@ def _setup_asset(release: dict, version: str) -> dict:
     return next(asset for asset in release["assets"] if asset["name"] == setup_name)
 
 
-def _download_setup(asset: dict) -> Path:
+def _download_setup(asset: dict, report) -> Path:
     updates_path = user_cache_path(APP_NAME, appauthor=False) / "updates"
     updates_path.mkdir(parents=True, exist_ok=True)
     setup_path = updates_path / asset["name"]
@@ -61,7 +61,12 @@ def _download_setup(asset: dict) -> Path:
         urlopen(_github_request(asset["browser_download_url"]), timeout=30) as response,
         setup_path.open("wb") as setup_file,
     ):
-        shutil.copyfileobj(response, setup_file)
+        downloaded = 0
+        report(Progress("Downloading update", 0, asset["size"]))
+        while chunk := response.read(256 * 1024):
+            setup_file.write(chunk)
+            downloaded += len(chunk)
+            report(Progress("Downloading update", downloaded, asset["size"]))
     return setup_path
 
 

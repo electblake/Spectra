@@ -1,6 +1,7 @@
 """Qt Widgets application bootstrap."""
 
 import multiprocessing
+import os
 import sys
 from pathlib import Path
 
@@ -32,7 +33,10 @@ def main():
     controller = Controller(sys.argv[1] if len(sys.argv) > 1 else None)
     window = MainWindow(controller)
     window.show()
-    return app.exec()
+    result = app.exec()
+    if controller.install_requested:
+        os.startfile(controller.installer_path)
+    return result
 
 
 if __name__ == "__main__":

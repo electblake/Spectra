@@ -9,48 +9,114 @@ import pytest
 from PIL import Image
 from PySide6.QtCore import QEventLoop, QObject, Qt, QTimer, QUrl
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QMessageBox, QPushButton
+from PySide6.QtWidgets import QFileDialog, QFormLayout, QMessageBox, QPushButton
 
 from app import application, config, integrations, main
 from app.events import Log, Progress
 from app.ui.window import MainWindow
 
 
-def test_extras_update_handoff_finishes_check_before_download(controller, qapp, monkeypatch, tmp_path):
+def test_settings_config_folder_picker_save_and_open(controller, qapp, tmp_path, monkeypatch):
+    window = MainWindow(controller)
+    window.show()
+    window.tabs.setCurrentIndex(1)
+    assert isinstance(window.settings_options.layout(), QFormLayout)
+    assert window.config_path.text() == str(tmp_path)
+    chosen = tmp_path / "chosen-config"
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", Mock(return_value=str(chosen)))
+    browse = window.findChild(QPushButton, "browseConfigFolder")
+    QTest.mouseClick(browse, Qt.MouseButton.LeftButton)
+    assert window.config_path.text() == str(chosen)
+    assert config.settings_file() == tmp_path / "Spectra.ini"
+    QTest.mouseClick(window.save, Qt.MouseButton.LeftButton)
+    assert config.settings_file() == chosen / "Spectra.ini"
+    assert config.read_user_settings()[0] == controller.settings
+    opened = Mock()
+    monkeypatch.setattr("app.ui.controller.QDesktopServices.openUrl", opened)
+    QTest.mouseClick(window.findChild(QPushButton, "openConfigFolder"), Qt.MouseButton.LeftButton)
+    opened.assert_called_once_with(QUrl.fromLocalFile(str(chosen)))
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", Mock(return_value=""))
+    QTest.mouseClick(browse, Qt.MouseButton.LeftButton)
+    assert window.config_path.text() == str(chosen)
+    window.close()
+    window.deleteLater()
+    qapp.processEvents()
+
+
+def test_extras_update_dialog_download_and_install(controller, qapp, monkeypatch, tmp_path):
     import platform
 
     version = "99.0.0"
     name = f"Spectra-{version}-{platform.system().lower()}-{platform.machine().lower()}-Setup.exe"
     asset = {"name": name}
     release = {"tag_name": f"v{version}", "assets": [asset]}
-    monkeypatch.setattr(integrations, "_latest_release", lambda: release)
+    entered = threading.Event()
+    proceed = threading.Event()
+
+    def latest():
+        entered.set()
+        assert proceed.wait(10)
+        return release
+
+    monkeypatch.setattr(integrations, "_latest_release", latest)
     setup = tmp_path / name
     setup.write_bytes(b"test installer")
-    download = Mock(return_value=setup)
+    download_entered = threading.Event()
+    download_proceed = threading.Event()
+
+    def download(asset_arg, report):
+        assert asset_arg == asset
+        report(Progress("Downloading update", 0, 100))
+        report(Progress("Downloading update", 50, 100))
+        download_entered.set()
+        assert download_proceed.wait(10)
+        return setup
+
     monkeypatch.setattr(integrations, "_download_setup", download)
-    launched = Mock()
-    monkeypatch.setattr("app.ui.controller.os.startfile", launched)
-
-    def accept_update(*args):
-        assert not controller.busy
-        assert controller._thread is None
-        return QMessageBox.StandardButton.Yes
-
-    monkeypatch.setattr(QMessageBox, "question", accept_update)
     window = MainWindow(controller)
     window.show()
     window.tabs.setCurrentIndex(2)
     check = next(button for button in window.extras.findChildren(QPushButton)
                  if button.text() == "Check for Updates")
     QTest.mouseClick(check, Qt.MouseButton.LeftButton)
-    for _ in range(100):
-        QTest.qWait(50)
-        if launched.called and not controller.busy:
-            break
-    download.assert_called_once_with(asset)
-    launched.assert_called_once_with(setup)
-    assert not controller.busy
-    assert controller._thread is None
+    dialog = window.update_dialog
+    assert entered.wait(5)
+    assert dialog.isVisible()
+    assert dialog.progress.maximum() == 0
+    assert not dialog.download.isEnabled()
+    assert not dialog.install.isEnabled()
+    proceed.set()
+    finish_task(controller)
+    assert dialog.download.isEnabled()
+    assert not dialog.install.isEnabled()
+    QTest.mouseClick(dialog.download, Qt.MouseButton.LeftButton)
+    assert download_entered.wait(5)
+    qapp.processEvents()
+    assert dialog.progress.value() == 500
+    assert not dialog.install.isEnabled()
+    assert not controller.install_requested
+    download_proceed.set()
+    finish_task(controller)
+    assert dialog.install.isEnabled()
+    assert not dialog.download.isEnabled()
+    assert controller.installer_path == setup
+    QTest.mouseClick(dialog.install, Qt.MouseButton.LeftButton)
+    assert controller.install_requested
+    assert not window.isVisible()
+    window.deleteLater()
+    qapp.processEvents()
+
+
+def test_update_dialog_up_to_date(controller, qapp, monkeypatch):
+    monkeypatch.setattr(integrations, "_latest_release", lambda: {"tag_name": f"v{config.APP_VERSION}"})
+    window = MainWindow(controller)
+    window._check_updates()
+    finish_task(controller)
+    dialog = window.update_dialog
+    assert "Up to date" in dialog.status.text()
+    assert not dialog.download.isEnabled()
+    assert not dialog.install.isEnabled()
+    dialog.reject()
     window.close()
     window.deleteLater()
     qapp.processEvents()
@@ -412,3 +478,34 @@ def test_project_samples_through_widget_preview_and_rename(controller, qapp, tmp
     window.close()
     window.deleteLater()
     qapp.processEvents()
+
+
+def test_installer_launch_waits_for_qt_event_loop_exit(tmp_path):
+    import subprocess
+    import sys
+
+    script = """
+import sys
+from pathlib import Path
+from PySide6.QtCore import QThread, QTimer
+from PySide6.QtWidgets import QApplication
+from app import config
+from app.ui import main_ui
+config.user_config_path = lambda *a, **k: Path(sys.argv[1])
+OriginalController = main_ui.Controller
+class UpdateController(OriginalController):
+    def __init__(self, folder=None):
+        super().__init__()
+        self.installer_path = Path('downloaded-setup.exe')
+        QTimer.singleShot(0, self.quitAndInstall)
+main_ui.Controller = UpdateController
+launched = []
+def startfile(path):
+    assert QThread.currentThread().loopLevel() == 0
+    assert not any(window.isVisible() for window in QApplication.topLevelWidgets())
+    launched.append(path)
+main_ui.os.startfile = startfile
+assert main_ui.main() == 0
+assert launched == [Path('downloaded-setup.exe')]
+"""
+    subprocess.run([sys.executable, "-c", script, str(tmp_path)], check=True, timeout=30)
