@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Saved window position, size, maximized state, and sorting-pane split in QSettings after resizing settles or the window closes; restored the layout on launch.
+
 ## [2.3.0] - 2026-10-18
 
 ### Added

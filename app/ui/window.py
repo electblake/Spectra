@@ -1,7 +1,8 @@
 """Standard desktop widgets bound to the application controller."""
 
-from PySide6.QtCore import QSignalBlocker, Qt, QUrl
+from PySide6.QtCore import QEvent, QSignalBlocker, Qt, QTimer, QUrl
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -23,6 +24,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from app import config
 
 
 class MainWindow(QMainWindow):
@@ -54,6 +57,18 @@ class MainWindow(QMainWindow):
         controller.completed.connect(self._show_completion)
         controller.closeReady.connect(self.close)
         self._sync_settings()
+        saved_layout = config.read_window_layout()
+        if "geometry" in saved_layout:
+            self.restoreGeometry(saved_layout["geometry"])
+        if "sorting_splitter" in saved_layout:
+            self.sorting_splitter.restoreState(saved_layout["sorting_splitter"])
+        self.layout_save_timer = QTimer(self)
+        self.layout_save_timer.setSingleShot(True)
+        self.layout_save_timer.setInterval(300)
+        self.layout_save_timer.timeout.connect(self._save_settled_layout)
+        self.sorting_splitter.splitterMoved.connect(lambda position, index: self.layout_save_timer.start())
+        self.save.clicked.connect(self._save_layout)
+        self.installEventFilter(self)
 
     def _text(self, key, label):
         field = QLineEdit()
@@ -86,6 +101,8 @@ class MainWindow(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.sorting_splitter = splitter
+        splitter.setOpaqueResize(False)
         layout.addWidget(splitter, 1)
         self.sort_options = QWidget()
         options = QVBoxLayout(self.sort_options)
@@ -328,8 +345,24 @@ class MainWindow(QMainWindow):
         self.update_dialog.open()
         self.controller.checkUpdates()
 
+    def eventFilter(self, watched, event):
+        if watched is self and event.type() in (QEvent.Type.Move, QEvent.Type.Resize, QEvent.Type.WindowStateChange):
+            self.layout_save_timer.start()
+        return super().eventFilter(watched, event)
+
+    def _save_settled_layout(self):
+        if QApplication.mouseButtons() != Qt.MouseButton.NoButton:
+            self.layout_save_timer.start()
+        else:
+            self._save_layout()
+
+    def _save_layout(self):
+        self.layout_save_timer.stop()
+        config.save_window_layout(self.saveGeometry(), self.sorting_splitter.saveState())
+
     def closeEvent(self, event):
         if self.controller.requestClose():
+            self._save_layout()
             event.accept()
         else:
             event.ignore()

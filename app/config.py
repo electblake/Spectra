@@ -113,6 +113,22 @@ def _settings_store() -> QSettings:
     return settings
 
 
+def read_window_layout() -> dict:
+    settings = _settings_store()
+    return {
+        key: settings.value(f"layout/{key}")
+        for key in ("geometry", "sorting_splitter")
+        if settings.contains(f"layout/{key}")
+    }
+
+
+def save_window_layout(geometry, sorting_splitter) -> None:
+    settings = _settings_store()
+    settings.setValue("layout/geometry", geometry)
+    settings.setValue("layout/sorting_splitter", sorting_splitter)
+    settings.sync()
+
+
 def read_user_settings() -> tuple[dict, Path | None]:
     path = settings_file()
     if not path.exists():
