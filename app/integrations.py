@@ -2,9 +2,10 @@ import json
 import platform
 import shutil
 import sys
-import tempfile
 from pathlib import Path
 from urllib.request import Request, urlopen
+
+from platformdirs import user_cache_path
 
 from app.config import APP_NAME, APP_VERSION
 
@@ -53,7 +54,9 @@ def _setup_asset(release: dict, version: str) -> dict:
 
 
 def _download_setup(asset: dict) -> Path:
-    setup_path = Path(tempfile.gettempdir()) / asset["name"]
+    updates_path = user_cache_path(APP_NAME, appauthor=False) / "updates"
+    updates_path.mkdir(parents=True, exist_ok=True)
+    setup_path = updates_path / asset["name"]
     with (
         urlopen(_github_request(asset["browser_download_url"]), timeout=30) as response,
         setup_path.open("wb") as setup_file,

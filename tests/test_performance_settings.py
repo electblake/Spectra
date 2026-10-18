@@ -47,7 +47,7 @@ def test_performance_settings_round_trip(tmp_path, monkeypatch):
     config.save_user_settings(**values)
     loaded, loaded_path = config.read_user_settings()
     assert loaded == values
-    assert loaded_path == tmp_path / "settings.ini"
+    assert loaded_path == tmp_path / "Spectra.ini"
 
 
 

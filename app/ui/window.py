@@ -116,6 +116,22 @@ class MainWindow(QMainWindow):
         form.addRow(hint)
         options.addWidget(clusters)
 
+        weights = QGroupBox("Feature weights")
+        form = QFormLayout(weights)
+        for key, label, description, step in (
+            ("rgb_weight", "RGB histogram", "Overall red, green, and blue color mix.", 0.1),
+            ("hsv_weight", "HSV histogram", "Hue, saturation, and color brightness.", 0.1),
+            ("spatial_weight", "Spatial color", "Where colors appear within the image.", 0.1),
+            ("texture_weight", "Texture", "Edges, patterns, and variations in detail.", 0.1),
+            ("brightness_weight", "Brightness and contrast", "Lightness, darkness, and tonal range.", 0.1),
+            ("aspect_ratio_weight", "Aspect ratio", "Portrait, square, and landscape proportions.", 0.05),
+        ):
+            field = self._number(key, label, 0, 3, step, 2)
+            field.setToolTip(description)
+            field.setAccessibleDescription(description)
+            form.addRow(label + ":", field)
+        options.addWidget(weights)
+
         renaming = QGroupBox("Renaming")
         form = QFormLayout(renaming)
         form.addRow("&Prefix:", self._text("file_prefix", "Prefix (used exactly as entered)"))
@@ -173,22 +189,6 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(page)
         self.settings_options = QWidget()
         options = QVBoxLayout(self.settings_options)
-        weights = QGroupBox("Feature weights")
-        form = QFormLayout(weights)
-        for key, label, description, step in (
-            ("rgb_weight", "RGB histogram", "Overall red, green, and blue color mix.", 0.1),
-            ("hsv_weight", "HSV histogram", "Hue, saturation, and color brightness.", 0.1),
-            ("spatial_weight", "Spatial color", "Where colors appear within the image.", 0.1),
-            ("texture_weight", "Texture", "Edges, patterns, and variations in detail.", 0.1),
-            ("brightness_weight", "Brightness and contrast", "Lightness, darkness, and tonal range.", 0.1),
-            ("aspect_ratio_weight", "Aspect ratio", "Portrait, square, and landscape proportions.", 0.05),
-        ):
-            field = self._number(key, label, 0, 3, step, 2)
-            field.setToolTip(description)
-            field.setAccessibleDescription(description)
-            form.addRow(label + ":", field)
-        options.addWidget(weights)
-
         video = QGroupBox("Video")
         form = QFormLayout(video)
         form.addRow("Frame position (%):", self._number("video_frame_percentage", "Frame position (%)", 0, 100))

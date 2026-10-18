@@ -3,8 +3,10 @@ from configparser import ConfigParser
 from pathlib import Path
 
 from platformdirs import user_config_path
+from PySide6.QtCore import QSettings
 
 APP_NAME = "Spectra"
+APP_ORGANIZATION = "electblake"
 APP_DESCRIPTION = "Visual Similarity Sorter"
 with (Path(__file__).parent.parent / "pyproject.toml").open("rb") as pyproject_file:
     APP_VERSION = tomllib.load(pyproject_file)["project"]["version"]
@@ -72,15 +74,67 @@ def default_settings() -> dict:
     }
 
 
+SETTINGS_KEYS = {
+    "feature_workers": "performance/feature_workers",
+    "video_workers": "performance/video_workers",
+    "png_compress_level": "performance/png_compress_level",
+    "resize_optimization": "performance/resize_optimization",
+    "rgb_weight": "feature_weights/rgb_weight",
+    "hsv_weight": "feature_weights/hsv_weight",
+    "spatial_weight": "feature_weights/spatial_weight",
+    "texture_weight": "feature_weights/texture_weight",
+    "brightness_weight": "feature_weights/brightness_weight",
+    "aspect_ratio_weight": "feature_weights/aspect_ratio_weight",
+    "video_frame_percentage": "videos/frame_percentage",
+    "dry_run": "general/dry_run",
+    "backup": "general/backup",
+    "include_videos": "general/include_videos",
+    "folder_path": "general/folder_path",
+    "file_prefix": "renaming/file_prefix",
+    "similarity_threshold": "clustering/similarity_threshold",
+    "auto_determine": "clustering/auto_determine",
+    "parse_dates": "renaming/parse_dates",
+    "date_pattern": "renaming/date_pattern",
+    "separator": "renaming/separator",
+    "count_start": "renaming/count_start",
+}
+
+
+def settings_file() -> Path:
+    return user_config_path(APP_NAME, appauthor=False, roaming=True) / "Spectra.ini"
+
+
+def _settings_store() -> QSettings:
+    settings = QSettings(str(settings_file()), QSettings.Format.IniFormat)
+    settings.setFallbacksEnabled(False)
+    return settings
+
+
 def read_user_settings() -> tuple[dict, Path | None]:
-    settings_path = user_config_path(
-        APP_NAME,
-        appauthor=False,
-    ) / "settings.ini"
+    path = settings_file()
+    if not path.exists():
+        legacy_path = user_config_path(APP_NAME, appauthor=False) / "settings.ini"
+        if legacy_path.exists():
+            save_user_settings(**_read_legacy_settings(legacy_path))
+        else:
+            return default_settings(), None
+    settings = _settings_store()
+    values = {
+        key: settings.value(SETTINGS_KEYS[key], default, type=type(default))
+        for key, default in default_settings().items()
+    }
+    return values, path
 
-    if not settings_path.exists():
-        return default_settings(), None
 
+def save_user_settings(**values) -> None:
+    settings_file().parent.mkdir(parents=True, exist_ok=True)
+    settings = _settings_store()
+    for key, setting_path in SETTINGS_KEYS.items():
+        settings.setValue(setting_path, values[key])
+    settings.sync()
+
+
+def _read_legacy_settings(settings_path: Path) -> dict:
     settings = ConfigParser(interpolation=None)
     with settings_path.open(encoding="utf-8") as settings_file:
         settings.read_file(settings_file)
@@ -148,79 +202,4 @@ def read_user_settings() -> tuple[dict, Path | None]:
             "file_prefix",
             fallback=FILE_PREFIX,
         ),
-    }, settings_path
-
-
-def save_user_settings(
-    rgb_weight,
-    hsv_weight,
-    spatial_weight,
-    texture_weight,
-    brightness_weight,
-    aspect_ratio_weight,
-    video_frame_percentage,
-    dry_run,
-    backup,
-    similarity_threshold,
-    auto_determine,
-    include_videos,
-    parse_dates,
-    date_pattern,
-    separator,
-    count_start,
-    folder_path,
-    file_prefix,
-    feature_workers,
-    png_compress_level,
-    resize_optimization,
-    video_workers,
-) -> None:
-    settings_path = user_config_path(
-        APP_NAME,
-        appauthor=False,
-        ensure_exists=True,
-    ) / "settings.ini"
-
-    settings = ConfigParser(interpolation=None)
-    if settings_path.exists():
-        with settings_path.open(encoding="utf-8") as settings_file:
-            settings.read_file(settings_file)
-
-    if not settings.has_section("feature_weights"):
-        settings.add_section("feature_weights")
-    if not settings.has_section("videos"):
-        settings.add_section("videos")
-    if not settings.has_section("general"):
-        settings.add_section("general")
-    if not settings.has_section("clustering"):
-        settings.add_section("clustering")
-    if not settings.has_section("renaming"):
-        settings.add_section("renaming")
-
-    settings["performance"] = {
-        "feature_workers": str(feature_workers),
-        "video_workers": str(video_workers),
-        "png_compress_level": str(png_compress_level),
-        "resize_optimization": resize_optimization,
     }
-    settings.set("feature_weights", "rgb_weight", str(rgb_weight))
-    settings.set("feature_weights", "hsv_weight", str(hsv_weight))
-    settings.set("feature_weights", "spatial_weight", str(spatial_weight))
-    settings.set("feature_weights", "texture_weight", str(texture_weight))
-    settings.set("feature_weights", "brightness_weight", str(brightness_weight))
-    settings.set("feature_weights", "aspect_ratio_weight", str(aspect_ratio_weight))
-    settings.set("videos", "frame_percentage", str(video_frame_percentage))
-    settings.set("general", "dry_run", str(dry_run))
-    settings.set("general", "backup", str(backup))
-    settings.set("clustering", "similarity_threshold", str(similarity_threshold))
-    settings.set("clustering", "auto_determine", str(auto_determine))
-    settings.set("general", "include_videos", str(include_videos))
-    settings.set("renaming", "parse_dates", str(parse_dates))
-    settings.set("renaming", "date_pattern", str(date_pattern))
-    settings.set("renaming", "separator", str(separator))
-    settings.set("renaming", "count_start", str(count_start))
-    settings.set("general", "folder_path", str(folder_path))
-    settings.set("renaming", "file_prefix", str(file_prefix))
-
-    with settings_path.open("w", encoding="utf-8") as settings_file:
-        settings.write(settings_file)

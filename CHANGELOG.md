@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-10-18
+
+### Changed
+
+- Moved Feature weights into Sort & Rename.
+- Stored user preferences with QSettings in the platform-specific configuration directory, with one-time conversion of existing settings and the original INI retained.
+- Stored downloaded installers in Spectra's update cache alongside its existing video frame cache.
+
 ## [2.1.0] - 2026-10-18
 
 ### Added
@@ -290,7 +298,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made `pyproject.toml` the sole source of the application version.
 - Refined application metadata, typing, formatting, and documentation.
 
-[Unreleased]: https://github.com/electblake/Spectra/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/electblake/Spectra/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/electblake/Spectra/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/electblake/Spectra/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/electblake/Spectra/compare/v0.6.4...v2.0.0
 [0.6.4]: https://github.com/electblake/Spectra/compare/v0.6.3...v0.6.4
