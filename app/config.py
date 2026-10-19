@@ -114,18 +114,20 @@ def _settings_store() -> QSettings:
 
 
 def read_window_layout() -> dict:
-    settings = _settings_store()
+    settings = QSettings(str(user_config_path(APP_NAME, appauthor=False, roaming=True) / "ui.ini"), QSettings.Format.IniFormat)
+    settings.setFallbacksEnabled(False)
     return {
         key: settings.value(f"layout/{key}")
-        for key in ("geometry", "sorting_splitter")
+        for key in ("geometry", "main_window_state")
         if settings.contains(f"layout/{key}")
     }
 
 
-def save_window_layout(geometry, sorting_splitter) -> None:
-    settings = _settings_store()
+def save_window_layout(geometry, main_window_state) -> None:
+    settings = QSettings(str(user_config_path(APP_NAME, appauthor=False, roaming=True) / "ui.ini"), QSettings.Format.IniFormat)
+    settings.setFallbacksEnabled(False)
     settings.setValue("layout/geometry", geometry)
-    settings.setValue("layout/sorting_splitter", sorting_splitter)
+    settings.setValue("layout/main_window_state", main_window_state)
     settings.sync()
 
 

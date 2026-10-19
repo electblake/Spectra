@@ -3,6 +3,9 @@ powershell = "7"
 python = "3.12"
 uv = "latest"
 
+[env]
+UV_LINK_MODE="copy"
+
 [tasks.build]
 description = "Compile Spectra as a standalone application bundle"
 run = "uv run --isolated pyinstaller --noconfirm --clean Spectra.spec"

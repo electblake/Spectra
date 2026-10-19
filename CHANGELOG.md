@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added feature specifications for the update checker and File Explorer integration installer.
+
+### Changed
+
+- Replaced the main tabs with movable sorting docks and a side Parameters dock containing reorderable Settings and Extras tabs; added View menu controls for dock visibility and Parameters placement.
+- Saved window geometry and dock layout in a global `ui.ini`, independent of the selected preferences folder.
+- Moved progress beside the sorting actions and displayed status messages in the status bar.
+- Configured uv to copy dependency files when running mise tasks.
+
+### Fixed
+
+- Preserved decimal keyboard entry in numeric settings by avoiding redundant value updates.
+
 ## [2.3.1] - 2026-10-18
 
 ### Added

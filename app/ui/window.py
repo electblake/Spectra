@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
+    QDockWidget,
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
@@ -19,13 +20,12 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSpinBox,
-    QSplitter,
-    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from app import config
+from app.ui.parameters_widget import ParametersWidget
 
 
 class MainWindow(QMainWindow):
@@ -35,20 +35,36 @@ class MainWindow(QMainWindow):
         self.fields = {}
         self.setWindowTitle(controller.title)
         self.resize(1100, 760)
-        self.tabs = QTabWidget()
-        self.tabs.setObjectName("mainTabs")
-        self.setCentralWidget(self.tabs)
-        self.tabs.addTab(self._sorting_page(), "&Sort && Rename")
-        self.tabs.addTab(self._settings_page(), "&Settings")
-        self.tabs.addTab(self._extras_page(), "&Extras")
+        self._sorting_docks()
+        self.central_content = QWidget()
+        central_layout = QVBoxLayout(self.central_content)
+        central_layout.addWidget(self._sorting_page(), 1)
+        self.setCentralWidget(self.central_content)
 
-        self.status = QLabel()
         self.metrics = QLabel()
-        self.progress = QProgressBar()
-        self.progress.setAccessibleName("Current stage progress")
-        self.statusBar().addWidget(self.status, 1)
         self.statusBar().addPermanentWidget(self.metrics)
-        self.statusBar().addPermanentWidget(self.progress)
+
+        self.parameters_dock = QDockWidget("Parameters", self)
+        self.parameters_dock.setObjectName("parametersDock")
+        self.parameters_dock.setWidget(ParametersWidget(self._settings_page(), self._extras_page()))
+        self.parameters_dock.setAllowedAreas(
+            Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
+        )
+        self.parameters_dock.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetClosable
+        )
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.parameters_dock)
+        view = self.menuBar().addMenu("&View")
+        for dock in (*self.sorting_docks, self.parameters_dock):
+            view.addAction(dock.toggleViewAction())
+        self.move_parameters_left = view.addAction("Move Parameters &Left")
+        self.move_parameters_left.triggered.connect(
+            lambda: self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.parameters_dock)
+        )
+        self.move_parameters_right = view.addAction("Move Parameters &Right")
+        self.move_parameters_right.triggered.connect(
+            lambda: self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.parameters_dock)
+        )
 
         controller.settingsChanged.connect(self._sync_settings)
         controller.stateChanged.connect(self._sync_state)
@@ -60,13 +76,17 @@ class MainWindow(QMainWindow):
         saved_layout = config.read_window_layout()
         if "geometry" in saved_layout:
             self.restoreGeometry(saved_layout["geometry"])
-        if "sorting_splitter" in saved_layout:
-            self.sorting_splitter.restoreState(saved_layout["sorting_splitter"])
+        if "main_window_state" in saved_layout:
+            self.restoreState(saved_layout["main_window_state"])
         self.layout_save_timer = QTimer(self)
         self.layout_save_timer.setSingleShot(True)
         self.layout_save_timer.setInterval(300)
         self.layout_save_timer.timeout.connect(self._save_settled_layout)
-        self.sorting_splitter.splitterMoved.connect(lambda position, index: self.layout_save_timer.start())
+        for dock in (*self.sorting_docks, self.parameters_dock):
+            dock.dockLocationChanged.connect(lambda area: self.layout_save_timer.start())
+            dock.topLevelChanged.connect(lambda floating: self.layout_save_timer.start())
+            dock.visibilityChanged.connect(self._dock_visibility_changed)
+            dock.installEventFilter(self)
         self.save.clicked.connect(self._save_layout)
         self.installEventFilter(self)
 
@@ -97,19 +117,10 @@ class MainWindow(QMainWindow):
         field.setAccessibleName(label.replace("&", ""))
         self.fields[key] = field
 
-    def _sorting_page(self):
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.sorting_splitter = splitter
-        splitter.setOpaqueResize(False)
-        layout.addWidget(splitter, 1)
-        self.sort_options = QWidget()
-        options = QVBoxLayout(self.sort_options)
-
-        media = QGroupBox("Media")
+    def _sorting_docks(self):
+        media = QWidget()
         form = QFormLayout(media)
-        form.addRow("Media &folder:", self._text("folder_path", "Media folder"))
+        form.addRow("Input &Folder:", self._text("folder_path", "Input Folder"))
         folder_actions = QHBoxLayout()
         browse = QPushButton("&Browse…")
         browse.clicked.connect(self._browse)
@@ -119,9 +130,8 @@ class MainWindow(QMainWindow):
         folder_actions.addWidget(self.open_folder)
         folder_actions.addStretch()
         form.addRow(folder_actions)
-        options.addWidget(media)
 
-        clusters = QGroupBox("Clusters")
+        clusters = QWidget()
         form = QFormLayout(clusters)
         form.addRow(self._check("auto_determine", "Auto-determine threshold"))
         form.addRow("Similarity threshold:", self._number(
@@ -130,9 +140,8 @@ class MainWindow(QMainWindow):
         hint = QLabel("Lower values create tighter clusters. Typical range: 0.005–0.05.")
         hint.setWordWrap(True)
         form.addRow(hint)
-        options.addWidget(clusters)
 
-        weights = QGroupBox("Feature weights")
+        weights = QWidget()
         form = QFormLayout(weights)
         for key, label, description, step in (
             ("rgb_weight", "RGB histogram", "Overall red, green, and blue color mix.", 0.1),
@@ -146,22 +155,38 @@ class MainWindow(QMainWindow):
             field.setToolTip(description)
             field.setAccessibleDescription(description)
             form.addRow(label + ":", field)
-        options.addWidget(weights)
 
-        renaming = QGroupBox("Renaming")
+        renaming = QWidget()
         form = QFormLayout(renaming)
         form.addRow("&Prefix:", self._text("file_prefix", "Prefix (used exactly as entered)"))
         form.addRow("Start counting at:", self._number("count_start", "Start counting at", 0, 2147483647))
         form.addRow(self._check("parse_dates", "Parse file dates"))
         form.addRow("Date pattern:", self._text("date_pattern", "Date pattern (regular expression)"))
         form.addRow("Date separator:", self._text("separator", "Separator before parsed date"))
-        options.addWidget(renaming)
-        options.addStretch()
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(self.sort_options)
-        splitter.addWidget(scroll)
+        self.sorting_docks = []
+        for name, title, content in (
+            ("mediaDock", "Selected Media Folder", media),
+            ("clustersDock", "Clusters", clusters),
+            ("featuresDock", "Feature weights", weights),
+            ("renamingDock", "Renaming", renaming),
+        ):
+            dock = QDockWidget(title, self)
+            dock.setObjectName(name)
+            dock.setAllowedAreas(Qt.DockWidgetArea.AllDockWidgetAreas)
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+            scroll.setWidget(content)
+            dock.setWidget(scroll)
+            self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dock)
+            self.sorting_docks.append(dock)
+        for upper, lower in zip(self.sorting_docks, self.sorting_docks[1:]):
+            self.splitDockWidget(upper, lower, Qt.Orientation.Vertical)
+        self.resizeDocks(self.sorting_docks, [110, 125, 200, 180], Qt.Orientation.Vertical)
 
+    def _sorting_page(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
         activity = QGroupBox("Activity")
         activity_layout = QVBoxLayout(activity)
         self.log = QPlainTextEdit("Ready. Choose a media folder to begin.")
@@ -169,9 +194,7 @@ class MainWindow(QMainWindow):
         self.log.setAccessibleName("Activity log")
         self.log.setReadOnly(True)
         activity_layout.addWidget(self.log)
-        splitter.addWidget(activity)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 1)
+        layout.addWidget(activity, 1)
 
         self.run_options = QWidget()
         run_options = QHBoxLayout(self.run_options)
@@ -189,7 +212,9 @@ class MainWindow(QMainWindow):
         self.stop.clicked.connect(self.controller.stop)
         actions.addWidget(self.start)
         actions.addWidget(self.stop)
-        actions.addStretch()
+        self.progress = QProgressBar()
+        self.progress.setAccessibleName("Current stage progress")
+        actions.addWidget(self.progress, 1)
         layout.addLayout(actions)
         return page
 
@@ -224,15 +249,15 @@ class MainWindow(QMainWindow):
         open_config = QPushButton("Open Config Folder")
         open_config.setObjectName("openConfigFolder")
         open_config.clicked.connect(self.controller.openConfigFolder)
-        config_row.addWidget(open_config)
         config_label = QLabel("&Config path:")
         config_label.setBuddy(self.config_path)
         form.addRow(config_label, config_row)
+        form.addRow("", open_config)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(self.settings_options)
         layout.addWidget(scroll)
-        layout.addWidget(QLabel("Save Settings stores options from all tabs in the selected config folder."))
+        layout.addWidget(QLabel("Save Settings stores all options in the selected config folder."))
         actions = QHBoxLayout()
         self.save = QPushButton("Save Settings")
         self.save.clicked.connect(self.controller.saveSettings)
@@ -281,7 +306,7 @@ class MainWindow(QMainWindow):
                     field.setChecked(value)
                 elif isinstance(field, QComboBox):
                     field.setCurrentText(value)
-                else:
+                elif field.value() != value:
                     field.setValue(value)
         if self.config_path.text() != self.controller.configFolder:
             self.config_path.setText(self.controller.configFolder)
@@ -290,7 +315,9 @@ class MainWindow(QMainWindow):
     def _sync_state(self):
         controller = self.controller
         settings = controller.settings
-        for widget in (self.sort_options, self.run_options, self.settings_options, self.extras, self.save, self.reset):
+        for dock in self.sorting_docks:
+            dock.widget().setEnabled(not controller.busy)
+        for widget in (self.run_options, self.settings_options, self.extras, self.save, self.reset):
             widget.setEnabled(not controller.busy)
         self.fields["similarity_threshold"].setEnabled(not settings["auto_determine"])
         self.fields["date_pattern"].setEnabled(settings["parse_dates"])
@@ -299,7 +326,7 @@ class MainWindow(QMainWindow):
         self.start.setEnabled(not controller.busy and bool(settings["folder_path"]))
         self.stop.setEnabled(controller.cancellable)
         self.update_status.setText(controller.updateStatus)
-        self.status.setText(controller.status)
+        self.statusBar().showMessage(controller.status)
         self.metrics.setText(controller.metrics)
         self.progress.setRange(0, 0 if controller.indeterminate else 100)
         self.progress.setValue(round(controller.fraction * 100))
@@ -346,9 +373,13 @@ class MainWindow(QMainWindow):
         self.controller.checkUpdates()
 
     def eventFilter(self, watched, event):
-        if watched is self and event.type() in (QEvent.Type.Move, QEvent.Type.Resize, QEvent.Type.WindowStateChange):
+        if watched in (self, *self.sorting_docks, self.parameters_dock) and event.type() in (QEvent.Type.Move, QEvent.Type.Resize, QEvent.Type.WindowStateChange):
             self.layout_save_timer.start()
         return super().eventFilter(watched, event)
+
+    def _dock_visibility_changed(self, visible):
+        if self.isVisible():
+            self.layout_save_timer.start()
 
     def _save_settled_layout(self):
         if QApplication.mouseButtons() != Qt.MouseButton.NoButton:
@@ -358,7 +389,7 @@ class MainWindow(QMainWindow):
 
     def _save_layout(self):
         self.layout_save_timer.stop()
-        config.save_window_layout(self.saveGeometry(), self.sorting_splitter.saveState())
+        config.save_window_layout(self.saveGeometry(), self.saveState())
 
     def closeEvent(self, event):
         if self.controller.requestClose():

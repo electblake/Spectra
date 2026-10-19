@@ -19,7 +19,7 @@ from app.ui.window import MainWindow
 def test_settings_config_folder_picker_save_and_open(controller, qapp, tmp_path, monkeypatch):
     window = MainWindow(controller)
     window.show()
-    window.tabs.setCurrentIndex(1)
+    window.parameters_dock.widget().tabs.setCurrentIndex(0)
     assert isinstance(window.settings_options.layout(), QFormLayout)
     assert window.config_path.text() == str(tmp_path)
     chosen = tmp_path / "chosen-config"
@@ -75,7 +75,7 @@ def test_extras_update_dialog_download_and_install(controller, qapp, monkeypatch
     monkeypatch.setattr(integrations, "_download_setup", download)
     window = MainWindow(controller)
     window.show()
-    window.tabs.setCurrentIndex(2)
+    window.parameters_dock.widget().tabs.setCurrentIndex(1)
     check = next(button for button in window.extras.findChildren(QPushButton)
                  if button.text() == "Check for Updates")
     QTest.mouseClick(check, Qt.MouseButton.LeftButton)
@@ -103,6 +103,45 @@ def test_extras_update_dialog_download_and_install(controller, qapp, monkeypatch
     QTest.mouseClick(dialog.install, Qt.MouseButton.LeftButton)
     assert controller.install_requested
     assert not window.isVisible()
+    window.deleteLater()
+    qapp.processEvents()
+
+
+def test_relocated_extras_actions_after_reordering(controller, qapp, monkeypatch):
+    entered = threading.Event()
+    release = threading.Event()
+
+    def install():
+        entered.set()
+        assert release.wait(10)
+
+    installed = Mock(side_effect=install)
+    opened = Mock()
+    monkeypatch.setattr(integrations, "install", installed)
+    monkeypatch.setattr("app.ui.controller.QDesktopServices.openUrl", opened)
+    window = MainWindow(controller)
+    window.show()
+    tabs = window.parameters_dock.widget().tabs
+    tabs.tabBar().moveTab(1, 0)
+    tabs.setCurrentWidget(window.extras)
+    buttons = {button.text(): button for button in window.extras.findChildren(QPushButton)}
+    QTest.mouseClick(buttons["View Releases"], Qt.MouseButton.LeftButton)
+    opened.assert_called_once_with(QUrl(integrations.RELEASES_URL))
+    QTest.mouseClick(buttons["Install in File Explorer"], Qt.MouseButton.LeftButton)
+    assert entered.wait(5)
+    assert not window.extras.isEnabled()
+    assert not window.settings_options.isEnabled()
+    assert not window.save.isEnabled()
+    assert not window.reset.isEnabled()
+    release.set()
+    finish_task(controller)
+    installed.assert_called_once()
+    assert window.extras.isEnabled()
+    assert window.settings_options.isEnabled()
+    assert window.save.isEnabled()
+    assert window.reset.isEnabled()
+    assert controller.status == "Installed in File Explorer"
+    window.close()
     window.deleteLater()
     qapp.processEvents()
 
@@ -301,17 +340,28 @@ def test_widget_tabs_resize_editing_and_log(controller, qapp):
         assert window.isVisible()
         start = window.findChild(QObject, "startButton")
         assert start.property("width") > 0
-    assert window.tabs.count() == 3
-    tab_bar = window.tabs.tabBar()
-    QTest.mouseClick(tab_bar, Qt.MouseButton.LeftButton, pos=tab_bar.tabRect(1).center())
-    assert window.tabs.currentIndex() == 1
-    assert not window.start.isVisible()
-    assert not window.log.isVisible()
+    tabs = window.parameters_dock.widget().tabs
+    assert tabs.count() == 2
+    assert tabs.isMovable()
+    tab_bar = tabs.tabBar()
+    assert tabs.currentIndex() == 0
+    assert window.start.isVisible()
+    assert window.log.isVisible()
     assert window.save.isVisible()
     QTest.keyClick(tab_bar, Qt.Key.Key_Tab, Qt.KeyboardModifier.ControlModifier)
-    assert window.tabs.currentIndex() == 2
+    assert tabs.currentIndex() == 1
     assert not window.save.isVisible()
+    assert window.extras.isVisible()
     QTest.mouseClick(tab_bar, Qt.MouseButton.LeftButton, pos=tab_bar.tabRect(0).center())
+    parameters = tabs.currentWidget()
+    tab_bar.moveTab(0, 1)
+    assert tabs.widget(1) is parameters
+    assert tabs.widget(0) is window.extras
+    assert window.save.isVisible()
+    assert window.parameters_dock.isAncestorOf(window.settings_options)
+    assert window.parameters_dock.isAncestorOf(window.extras)
+    window.fields["feature_workers"].setValue(6)
+    assert controller.settings["feature_workers"] == 6
     assert window.start.isVisible()
     assert window.log.isVisible()
     controller.setSetting("file_prefix", "widget_test_")
@@ -359,6 +409,59 @@ def test_widget_settings_sync_without_feedback(controller, qapp):
     qapp.processEvents()
 
 
+@pytest.mark.parametrize("key,text", [("rgb_weight", "1.25"), ("similarity_threshold", "0.012345")])
+def test_decimal_keyboard_entry(controller, qapp, key, text):
+    controller.setSetting("auto_determine", False)
+    window = MainWindow(controller)
+    window.show()
+    field = window.fields[key]
+    field.setFocus()
+    QTest.keyClick(field, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+    QTest.keyClicks(field, text)
+    QTest.keyClick(field, Qt.Key.Key_Tab)
+    assert field.value() == float(text)
+    assert controller.settings[key] == float(text)
+    controller.setSetting(key, 0.5)
+    assert field.value() == 0.5
+    window.close()
+    window.deleteLater()
+    qapp.processEvents()
+
+
+def test_relocated_parameters_save_restore_and_central_content(controller, qapp):
+    window = MainWindow(controller)
+    window.show()
+    panel = window.parameters_dock.widget()
+    assert panel.tabs.widget(0).isAncestorOf(window.settings_options)
+    assert set(window.fields) == set(config.default_settings())
+    values = {"video_frame_percentage": 75, "feature_workers": 3, "video_workers": 2, "png_compress_level": 8}
+    for key, value in values.items():
+        field = window.fields[key]
+        field.setFocus()
+        QTest.keyClick(field, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+        QTest.keyClicks(field, str(value))
+        QTest.keyClick(field, Qt.Key.Key_Tab)
+        assert controller.settings[key] == value
+    resize = window.fields["resize_optimization"]
+    resize.setFocus()
+    QTest.keyClick(resize, Qt.Key.Key_End)
+    assert controller.settings["resize_optimization"] == "High"
+    window.save.click()
+    assert config.read_user_settings()[0] == controller.settings
+    panel.tabs.tabBar().moveTab(0, 1)
+    window.reset.click()
+    assert controller.settings == config.default_settings()
+    for key in values:
+        assert window.fields[key].value() == config.default_settings()[key]
+    assert window.centralWidget() is window.central_content
+    for widget in (window.progress, window.log, window.start):
+        assert window.central_content.isAncestorOf(widget)
+    assert window.statusBar().isAncestorOf(window.metrics)
+    window.close()
+    window.deleteLater()
+    qapp.processEvents()
+
+
 def test_widget_start_confirmation_and_busy_controls(controller, qapp, monkeypatch):
     window = MainWindow(controller)
     controller.setSetting("folder_path", "media")
@@ -378,9 +481,50 @@ def test_widget_start_confirmation_and_busy_controls(controller, qapp, monkeypat
     assert window.stop.isEnabled()
     assert not window.fields["folder_path"].isEnabled()
     assert not window.fields["feature_workers"].isEnabled()
+    for dock in window.sorting_docks:
+        assert not dock.widget().isEnabled()
+        assert dock.isEnabled()
     window.stop.click()
     assert controller.stopping
     assert not window.stop.isEnabled()
+    window.deleteLater()
+    qapp.processEvents()
+
+
+def test_moved_sorting_docks_keep_controls_connected(controller, qapp, monkeypatch, tmp_path):
+    window = MainWindow(controller)
+    window.show()
+    for dock in window.sorting_docks:
+        window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", Mock(return_value=str(tmp_path)))
+    opened = Mock()
+    monkeypatch.setattr("app.ui.controller.QDesktopServices.openUrl", opened)
+    browse = next(button for button in window.sorting_docks[0].findChildren(QPushButton)
+                  if button.text() == "&Browse…")
+    browse.click()
+    finish_task(controller)
+    assert Path(controller.settings["folder_path"]) == tmp_path
+    window.open_folder.click()
+    opened.assert_called_once_with(QUrl.fromLocalFile(str(tmp_path)))
+    controller.setSetting("auto_determine", False)
+    window.fields["auto_determine"].click()
+    assert not window.fields["similarity_threshold"].isEnabled()
+    window.fields["parse_dates"].click()
+    assert window.fields["date_pattern"].isEnabled()
+    for key in ("rgb_weight", "hsv_weight", "spatial_weight", "texture_weight",
+                "brightness_weight", "aspect_ratio_weight"):
+        window.fields[key].setValue(1.25)
+        assert controller.settings[key] == 1.25
+    QTest.keyClicks(window.fields["file_prefix"], "dock_")
+    window.fields["count_start"].setValue(42)
+    assert controller.settings["file_prefix"] == "dock_"
+    assert controller.settings["count_start"] == 42
+    window.save.click()
+    assert config.read_user_settings()[0] == controller.settings
+    window.reset.click()
+    assert controller.settings == config.default_settings()
+    assert window.fields["file_prefix"].text() == ""
+    window.close()
     window.deleteLater()
     qapp.processEvents()
 
@@ -408,8 +552,8 @@ def test_project_samples_through_widget_preview_and_rename(controller, qapp, tmp
     QTest.qWait(100)
     QTest.keyClicks(window.fields["folder_path"], str(working))
     QTest.keyClicks(window.fields["file_prefix"], "qt_sample_")
-    tab_bar = window.tabs.tabBar()
-    QTest.mouseClick(tab_bar, Qt.MouseButton.LeftButton, pos=tab_bar.tabRect(1).center())
+    tab_bar = window.parameters_dock.widget().tabs.tabBar()
+    QTest.mouseClick(tab_bar, Qt.MouseButton.LeftButton, pos=tab_bar.tabRect(0).center())
     workers = window.fields["video_workers"]
     workers.setFocus()
     QTest.keyClick(workers, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
@@ -425,7 +569,7 @@ def test_project_samples_through_widget_preview_and_rename(controller, qapp, tmp
     assert not window.start.isEnabled()
     assert window.stop.isEnabled()
     finish_task(controller)
-    assert window.status.text() == "Sorting complete"
+    assert window.statusBar().currentMessage() == "Sorting complete"
     assert window.progress.value() == 100
     assert {path.name: digest(path) for path in working.iterdir()} == originals
     preview_log = window.log.toPlainText()
@@ -454,7 +598,7 @@ def test_project_samples_through_widget_preview_and_rename(controller, qapp, tmp
     QTimer.singleShot(0, lambda: confirm(QMessageBox.StandardButton.Yes))
     QTest.mouseClick(window.start, Qt.MouseButton.LeftButton)
     finish_task(controller)
-    assert window.status.text() == "Sorting complete"
+    assert window.statusBar().currentMessage() == "Sorting complete"
     assert window.progress.value() == 100
     assert window.start.isEnabled()
     assert not window.stop.isEnabled()
