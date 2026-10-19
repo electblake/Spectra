@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-10-19
+
 ### Added
 
 - Added a saved mapping CSV folder setting, defaulting to `{workFolder}`, with placeholder expansion, relative and absolute paths, and automatic destination folder creation.
@@ -352,7 +354,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made `pyproject.toml` the sole source of the application version.
 - Refined application metadata, typing, formatting, and documentation.
 
-[Unreleased]: https://github.com/electblake/Spectra/compare/v2.4.0...HEAD
+[Unreleased]: https://github.com/electblake/Spectra/compare/v2.5.0...HEAD
+[2.5.0]: https://github.com/electblake/Spectra/compare/v2.4.0...v2.5.0
 [2.4.0]: https://github.com/electblake/Spectra/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/electblake/Spectra/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/electblake/Spectra/compare/v2.2.1...v2.3.0
