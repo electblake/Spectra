@@ -33,6 +33,8 @@ class RunRequest:
     video_workers: int
     png_compress_level: int
     resize_optimization: str
+    mapping_csv_folder: str
+    overwrite_mapping_csv: bool
 
 
 @dataclass(frozen=True)
@@ -69,6 +71,8 @@ def run_sorting(request, stop, report):
         "parse_dates": request.parse_dates, "date_pattern": request.date_pattern,
         "separator": request.separator, "count_start": request.count_start,
         "stop_event": stop, "report": report,
+        "mapping_csv_folder": request.mapping_csv_folder,
+        "overwrite_mapping_csv": request.overwrite_mapping_csv,
     }
     if videos:
         main.rename_media(ordered, request.folder_path, **options)

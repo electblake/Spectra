@@ -19,6 +19,8 @@ def test_qsettings_round_trip_in_fresh_process(tmp_path, monkeypatch):
         "backup": True,
         "rgb_weight": 1.25,
         "count_start": 27,
+        "mapping_csv_folder": "{workFolder}/../Data/日本語",
+        "overwrite_mapping_csv": True,
     }
     config.save_user_settings(**values)
     settings = QSettings(str(tmp_path / "Spectra.ini"), QSettings.Format.IniFormat)

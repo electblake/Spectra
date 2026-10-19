@@ -21,6 +21,8 @@ from app.config import (
     DEFAULT_FEATURE_WEIGHTS,
     FEATURE_WORKERS,
     IMAGE_EXTENSIONS,
+    MAPPING_CSV_FOLDER,
+    OVERWRITE_MAPPING_CSV,
     PNG_COMPRESS_LEVEL,
     SEPARATOR,
     VIDEO_EXTENSIONS,
@@ -447,7 +449,9 @@ def rename_images(sorted_images: list[tuple[Path, np.ndarray]],
                   separator: str = SEPARATOR,
                   count_start: int = COUNT_START,
                   stop_event: threading.Event | None = None,
-                  report=console_report) -> None:
+                  report=console_report,
+                  mapping_csv_folder: str = MAPPING_CSV_FOLDER,
+                  overwrite_mapping_csv: bool = OVERWRITE_MAPPING_CSV) -> None:
     folder = sorted_images[0][0].parent
 
     backup_folder = folder / "backup_originals"
@@ -516,9 +520,15 @@ def rename_images(sorted_images: list[tuple[Path, np.ndarray]],
         elif i == 6:
             report(Log(f"  ... ({len(temp_names) - 10} more) ..."))
 
-    mapping_file = folder / "rename_mapping.csv"
+    mapping_folder = (folder / mapping_csv_folder.replace("{workFolder}", str(folder.resolve()))).resolve()
+    mapping_file = mapping_folder / "rename_mapping.csv"
     if not dry_run:
-        with open(mapping_file, 'w', encoding='utf-8') as f:
+        mapping_folder.mkdir(parents=True, exist_ok=True)
+        mapping_number = 1
+        while not overwrite_mapping_csv and mapping_file.exists():
+            mapping_file = mapping_folder / f"rename_mapping_{mapping_number}.csv"
+            mapping_number += 1
+        with open(mapping_file, 'w' if overwrite_mapping_csv else 'x', encoding='utf-8') as f:
             f.write("Original Name,New Name\n")
             f.writelines(f'"{orig}","{new}"\n' for orig, new in final_mapping)
         report(Log(f"\nMapping saved to: {mapping_file}"))
@@ -539,7 +549,9 @@ def rename_media(sorted_images: list[tuple[Path, np.ndarray]],
                  separator: str = SEPARATOR,
                  count_start: int = COUNT_START,
                  stop_event: threading.Event | None = None,
-                  report=console_report) -> None:
+                 report=console_report,
+                 mapping_csv_folder: str = MAPPING_CSV_FOLDER,
+                 overwrite_mapping_csv: bool = OVERWRITE_MAPPING_CSV) -> None:
     folder = Path(folder_path)
     media_files = [
         video_frame_source(image_path, folder)
@@ -607,9 +619,15 @@ def rename_media(sorted_images: list[tuple[Path, np.ndarray]],
         elif i == 6:
             report(Log(f"  ... ({len(temp_names) - 10} more) ..."))
 
-    mapping_file = folder / "rename_mapping.csv"
+    mapping_folder = (folder / mapping_csv_folder.replace("{workFolder}", str(folder.resolve()))).resolve()
+    mapping_file = mapping_folder / "rename_mapping.csv"
     if not dry_run:
-        with open(mapping_file, 'w', encoding='utf-8') as f:
+        mapping_folder.mkdir(parents=True, exist_ok=True)
+        mapping_number = 1
+        while not overwrite_mapping_csv and mapping_file.exists():
+            mapping_file = mapping_folder / f"rename_mapping_{mapping_number}.csv"
+            mapping_number += 1
+        with open(mapping_file, 'w' if overwrite_mapping_csv else 'x', encoding='utf-8') as f:
             f.write("Original Name,New Name\n")
             f.writelines(f'"{orig}","{new}"\n' for orig, new in final_mapping)
         report(Log(f"\nMapping saved to: {mapping_file}"))

@@ -16,6 +16,41 @@ from app.events import Log, Progress
 from app.ui.window import MainWindow
 
 
+def test_mapping_csv_folder_edit_save_and_restore(controller, qapp):
+    window = MainWindow(controller)
+    field = window.fields["mapping_csv_folder"]
+    assert field.text() == "{workFolder}"
+    QTest.keyClick(field, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+    QTest.keyClicks(field, "{workFolder}/../Data")
+    assert controller.settings["mapping_csv_folder"] == "{workFolder}/../Data"
+    window.save.click()
+    assert config.read_user_settings()[0]["mapping_csv_folder"] == "{workFolder}/../Data"
+    window.reset.click()
+    assert field.text() == "{workFolder}"
+    window.close()
+    window.deleteLater()
+    qapp.processEvents()
+
+
+def test_overwrite_mapping_csv_checkbox_save_and_restore(controller, qapp):
+    window = MainWindow(controller)
+    field = window.fields["overwrite_mapping_csv"]
+    folder = window.fields["folder_path"]
+    assert field.parentWidget() is folder.parentWidget()
+    layout = folder.parentWidget().layout()
+    assert layout.getWidgetPosition(field)[0] == layout.getWidgetPosition(folder)[0] + 1
+    assert not field.isChecked()
+    field.click()
+    assert controller.settings["overwrite_mapping_csv"] is True
+    window.save.click()
+    assert config.read_user_settings()[0]["overwrite_mapping_csv"] is True
+    window.reset.click()
+    assert not field.isChecked()
+    window.close()
+    window.deleteLater()
+    qapp.processEvents()
+
+
 def test_settings_config_folder_picker_save_and_open(controller, qapp, tmp_path, monkeypatch):
     window = MainWindow(controller)
     window.show()
@@ -266,6 +301,8 @@ def test_application_dispatches_video_options(monkeypatch, tmp_path):
     request = application.RunRequest(**(config.default_settings() | {
         "folder_path": str(tmp_path), "video_workers": 3,
         "video_frame_percentage": 75, "png_compress_level": 8,
+        "mapping_csv_folder": "{workFolder}/../Data",
+        "overwrite_mapping_csv": True,
     }))
     monkeypatch.setattr(main, "get_image_files", Mock(return_value=[]))
     extraction = Mock(return_value=[tmp_path / "frame.png"])
@@ -278,6 +315,8 @@ def test_application_dispatches_video_options(monkeypatch, tmp_path):
     application.run_sorting(request, stop, report)
     extraction.assert_called_once_with(str(tmp_path), stop, 75, 8, 3, report=report)
     assert rename.call_args.args[1] == str(tmp_path)
+    assert rename.call_args.kwargs["mapping_csv_folder"] == "{workFolder}/../Data"
+    assert rename.call_args.kwargs["overwrite_mapping_csv"] is True
 
 
 @pytest.mark.parametrize("dry_run", [True, False])

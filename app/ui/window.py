@@ -121,6 +121,7 @@ class MainWindow(QMainWindow):
         media = QWidget()
         form = QFormLayout(media)
         form.addRow("Input &Folder:", self._text("folder_path", "Input Folder"))
+        form.addRow(self._check("overwrite_mapping_csv", "Overwrite existing mapping CSV"))
         folder_actions = QHBoxLayout()
         browse = QPushButton("&Browse…")
         browse.clicked.connect(self._browse)
@@ -163,6 +164,14 @@ class MainWindow(QMainWindow):
         form.addRow(self._check("parse_dates", "Parse file dates"))
         form.addRow("Date pattern:", self._text("date_pattern", "Date pattern (regular expression)"))
         form.addRow("Date separator:", self._text("separator", "Separator before parsed date"))
+        mapping_folder = self._text("mapping_csv_folder", "Mapping CSV folder")
+        mapping_hint = (
+            "{workFolder} is the input folder. Use {workFolder}/Data for a subfolder "
+            "or {workFolder}/../Data for a sibling folder. Relative paths start at the input folder."
+        )
+        mapping_folder.setToolTip(mapping_hint)
+        mapping_folder.setAccessibleDescription(mapping_hint)
+        form.addRow("Mapping CSV folder:", mapping_folder)
         self.sorting_docks = []
         for name, title, content in (
             ("mediaDock", "Selected Media Folder", media),

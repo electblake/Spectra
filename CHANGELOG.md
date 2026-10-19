@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added a saved mapping CSV folder setting, defaulting to `{workFolder}`, with placeholder expansion, relative and absolute paths, and automatic destination folder creation.
+- Added an Overwrite existing mapping CSV checkbox beneath Input Folder, disabled by default and saved with QSettings.
+
+### Changed
+
+- Numbered mapping CSV filenames when the destination already exists, preserving previous mappings unless overwrite is enabled.
+
 ## [2.4.0] - 2026-10-18
 
 ### Added
