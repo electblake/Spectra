@@ -120,6 +120,7 @@ def get_video_image_files(
         return sorted(image_files)
 
     report(Progress(f"Extracting frames from {len(video_files)} videos..."))
+    report(Log(f"Extracting frames from {len(video_files)} videos..."))
     report(Progress('Extracting video frames', 0, len(video_files)))
 
     process_context = multiprocessing.get_context("spawn")
@@ -152,6 +153,8 @@ def get_video_image_files(
                         report(Log(f"  Warning: Skipping invalid Unicode filename: {video_file_path.name!a}"))
                         completed += 1
                         report(Progress('Extracting video frames', completed, len(video_files)))
+                        if completed % 10 == 0 or completed == len(video_files):
+                            report(Log(f"Extracting video frames {completed}/{len(video_files)}"))
                         continue
                     image_file_path = video_frame_path(video_file_path)
                     parent_connection.send((
@@ -190,6 +193,8 @@ def get_video_image_files(
                 worker["path"] = None
                 completed += 1
                 report(Progress('Extracting video frames', completed, len(video_files)))
+                if completed % 10 == 0 or completed == len(video_files):
+                    report(Log(f"Extracting video frames {completed}/{len(video_files)}"))
             if completed < len(video_files) and stop_event.wait(0.05):
                 break
     finally:
@@ -205,6 +210,7 @@ def get_video_image_files(
         report(Log("Frame extraction stopped."))
         return []
 
+    report(Log(f"Frame extraction complete: {len(image_files)} frames available"))
     return sorted(image_files)
 
 
