@@ -24,12 +24,12 @@ def test_layout_debounces_and_restores(controller, qapp, monkeypatch):
     QTest.qWait(400)
     assert save.call_count == 1
     save.reset_mock()
-    window.resizeDocks([window.sorting_docks[0]], [350], Qt.Orientation.Horizontal)
+    window.resizeDocks([window.sorting_docks[1]], [350], Qt.Orientation.Horizontal)
     QTest.qWait(50)
     assert not save.called
     QTest.qWait(400)
     assert save.call_count == 1
-    width = window.sorting_docks[0].width()
+    width = window.sorting_docks[1].width()
     size = window.size()
     window.close()
     window.deleteLater()
@@ -38,7 +38,7 @@ def test_layout_debounces_and_restores(controller, qapp, monkeypatch):
     restored.show()
     QTest.qWait(50)
     assert restored.size() == size
-    assert restored.sorting_docks[0].width() == width
+    assert restored.sorting_docks[1].width() == width
     restored.close()
     restored.deleteLater()
     qapp.processEvents()
@@ -157,8 +157,9 @@ def test_sorting_docks_default_order_and_layout_restore(controller, qapp):
     assert [dock.windowTitle() for dock in docks] == ["Selected Media Folder", "Clusters", "Feature weights", "Renaming"]
     assert [dock.y() for dock in docks] == sorted(dock.y() for dock in docks)
     assert not window.findChildren(QSplitter)
-    for dock in docks:
-        assert window.dockWidgetArea(dock) == Qt.DockWidgetArea.LeftDockWidgetArea
+    for index, dock in enumerate(docks):
+        area = Qt.DockWidgetArea.TopDockWidgetArea if index == 0 else Qt.DockWidgetArea.LeftDockWidgetArea
+        assert window.dockWidgetArea(dock) == area
         assert dock.allowedAreas() == Qt.DockWidgetArea.AllDockWidgetAreas
         assert dock.features() & QDockWidget.DockWidgetFeature.DockWidgetFloatable
         assert not dock.findChildren(QGroupBox)
@@ -187,6 +188,47 @@ def test_sorting_docks_default_order_and_layout_restore(controller, qapp):
     assert restored.sorting_docks[0].isVisible()
     restored.sorting_docks[1].setFloating(False)
     assert restored.dockWidgetArea(restored.sorting_docks[1]) == Qt.DockWidgetArea.RightDockWidgetArea
+    restored.close()
+    restored.deleteLater()
+    qapp.processEvents()
+
+
+def test_reset_layout_restores_all_docks_and_persists(controller, qapp):
+    window = MainWindow(controller)
+    window.show()
+    QTest.qWait(100)
+    for dock in window.sorting_docks:
+        window.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, dock)
+    window.sorting_docks[1].setFloating(True)
+    window.sorting_docks[0].close()
+    window.move_parameters_left.trigger()
+    window.parameters_dock.close()
+    view = window.menuBar().actions()[1].menu()
+    assert view.actions()[-2].isSeparator()
+    assert view.actions()[-1] == window.reset_layout
+    window.reset_layout.trigger()
+    qapp.processEvents()
+    for index, dock in enumerate(window.sorting_docks):
+        area = Qt.DockWidgetArea.TopDockWidgetArea if index == 0 else Qt.DockWidgetArea.LeftDockWidgetArea
+        assert window.dockWidgetArea(dock) == area
+        assert dock.isVisible()
+        assert not dock.isFloating()
+    assert window.dockWidgetArea(window.parameters_dock) == Qt.DockWidgetArea.RightDockWidgetArea
+    assert window.parameters_dock.isVisible()
+    assert [dock.y() for dock in window.sorting_docks[1:]] == sorted(
+        dock.y() for dock in window.sorting_docks[1:]
+    )
+    QTest.qWait(400)
+    assert config.read_window_layout()["main_window_state"] == window.saveState()
+    window.close()
+    window.deleteLater()
+    qapp.processEvents()
+    restored = MainWindow(Controller())
+    restored.show()
+    QTest.qWait(100)
+    assert restored.dockWidgetArea(restored.sorting_docks[0]) == Qt.DockWidgetArea.TopDockWidgetArea
+    assert all(dock.isVisible() and not dock.isFloating() for dock in restored.sorting_docks)
+    assert restored.dockWidgetArea(restored.parameters_dock) == Qt.DockWidgetArea.RightDockWidgetArea
     restored.close()
     restored.deleteLater()
     qapp.processEvents()

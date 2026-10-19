@@ -16,6 +16,31 @@ from app.events import Log, Progress
 from app.ui.window import MainWindow
 
 
+def test_file_menu_select_folder(controller, qapp, monkeypatch, tmp_path):
+    window = MainWindow(controller)
+    menus = window.menuBar().actions()
+    assert [action.text() for action in menus] == ["&File", "&View"]
+    assert menus[0].menu().actions() == [window.select_folder]
+    folder = tmp_path / "media"
+    folder.mkdir()
+    selected = QUrl.fromLocalFile(str(folder)).toLocalFile()
+    picker = Mock(return_value=str(folder))
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", picker)
+    window.select_folder.trigger()
+    picker.assert_called_once_with(window, "Select Media Folder", "")
+    assert controller.settings["folder_path"] == selected
+    assert window.fields["folder_path"].text() == selected
+    assert not window.select_folder.isEnabled()
+    finish_task(controller)
+    assert window.select_folder.isEnabled()
+    picker.return_value = ""
+    window.select_folder.trigger()
+    assert controller.settings["folder_path"] == selected
+    window.close()
+    window.deleteLater()
+    qapp.processEvents()
+
+
 def test_mapping_csv_folder_edit_save_and_restore(controller, qapp):
     window = MainWindow(controller)
     field = window.fields["mapping_csv_folder"]
@@ -73,6 +98,15 @@ def test_settings_config_folder_picker_save_and_open(controller, qapp, tmp_path,
     monkeypatch.setattr(QFileDialog, "getExistingDirectory", Mock(return_value=""))
     QTest.mouseClick(browse, Qt.MouseButton.LeftButton)
     assert window.config_path.text() == str(chosen)
+    settings = controller.settings
+    QTest.mouseClick(window.findChild(QPushButton, "setUserDefaultConfigFolder"), Qt.MouseButton.LeftButton)
+    assert window.config_path.text() == str(tmp_path)
+    assert controller.configFolder == str(tmp_path)
+    assert controller.settings == settings
+    assert config.settings_file() == chosen / "Spectra.ini"
+    QTest.mouseClick(window.save, Qt.MouseButton.LeftButton)
+    assert config.settings_file() == tmp_path / "Spectra.ini"
+    assert config.read_user_settings()[0] == settings
     window.close()
     window.deleteLater()
     qapp.processEvents()

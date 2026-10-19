@@ -54,6 +54,9 @@ class MainWindow(QMainWindow):
             QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetClosable
         )
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.parameters_dock)
+        file = self.menuBar().addMenu("&File")
+        self.select_folder = file.addAction("&Select Folder…")
+        self.select_folder.triggered.connect(self._browse)
         view = self.menuBar().addMenu("&View")
         for dock in (*self.sorting_docks, self.parameters_dock):
             view.addAction(dock.toggleViewAction())
@@ -65,6 +68,10 @@ class MainWindow(QMainWindow):
         self.move_parameters_right.triggered.connect(
             lambda: self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.parameters_dock)
         )
+        view.addSeparator()
+        self.reset_layout = view.addAction("&Reset Layout")
+        self.reset_layout.triggered.connect(self._reset_layout)
+        self.default_layout = self.saveState()
 
         controller.settingsChanged.connect(self._sync_settings)
         controller.stateChanged.connect(self._sync_state)
@@ -187,11 +194,12 @@ class MainWindow(QMainWindow):
             scroll.setFrameShape(QScrollArea.Shape.NoFrame)
             scroll.setWidget(content)
             dock.setWidget(scroll)
-            self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dock)
+            area = Qt.DockWidgetArea.TopDockWidgetArea if name == "mediaDock" else Qt.DockWidgetArea.LeftDockWidgetArea
+            self.addDockWidget(area, dock)
             self.sorting_docks.append(dock)
-        for upper, lower in zip(self.sorting_docks, self.sorting_docks[1:]):
+        for upper, lower in zip(self.sorting_docks[1:], self.sorting_docks[2:]):
             self.splitDockWidget(upper, lower, Qt.Orientation.Vertical)
-        self.resizeDocks(self.sorting_docks, [110, 125, 200, 180], Qt.Orientation.Vertical)
+        self.resizeDocks(self.sorting_docks[1:], [125, 200, 180], Qt.Orientation.Vertical)
 
     def _sorting_page(self):
         page = QWidget()
@@ -258,10 +266,18 @@ class MainWindow(QMainWindow):
         open_config = QPushButton("Open Config Folder")
         open_config.setObjectName("openConfigFolder")
         open_config.clicked.connect(self.controller.openConfigFolder)
+        config_actions = QHBoxLayout()
+        config_actions.addWidget(open_config)
+        default_config = QPushButton("Set User Default")
+        default_config.setObjectName("setUserDefaultConfigFolder")
+        default_config.clicked.connect(lambda: self.controller.setConfigFolder(
+            str(config.user_config_path(config.APP_NAME, appauthor=False, roaming=True))
+        ))
+        config_actions.addWidget(default_config)
         config_label = QLabel("&Config path:")
         config_label.setBuddy(self.config_path)
         form.addRow(config_label, config_row)
-        form.addRow("", open_config)
+        form.addRow("", config_actions)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(self.settings_options)
@@ -324,6 +340,7 @@ class MainWindow(QMainWindow):
     def _sync_state(self):
         controller = self.controller
         settings = controller.settings
+        self.select_folder.setEnabled(not controller.busy)
         for dock in self.sorting_docks:
             dock.widget().setEnabled(not controller.busy)
         for widget in (self.run_options, self.settings_options, self.extras, self.save, self.reset):
@@ -395,6 +412,10 @@ class MainWindow(QMainWindow):
             self.layout_save_timer.start()
         else:
             self._save_layout()
+
+    def _reset_layout(self):
+        self.restoreState(self.default_layout)
+        self._save_layout()
 
     def _save_layout(self):
         self.layout_save_timer.stop()

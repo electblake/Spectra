@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-10-19
+
+### Added
+
+- Added File → Select Folder using the existing media folder picker.
+- Added View → Reset Layout below a divider to restore all docks to their default positions and visibility.
+- Added Set User Default beside Open Config Folder to reset only the configuration path to the user's default folder.
+
+### Changed
+
+- Placed Selected Media Folder in the top dock area by default.
+
 ## [2.5.0] - 2026-10-19
 
 ### Added
