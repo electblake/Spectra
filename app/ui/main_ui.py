@@ -2,6 +2,7 @@
 
 import multiprocessing
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -35,7 +36,26 @@ def main():
     window.show()
     result = app.exec()
     if controller.install_requested:
-        os.startfile(controller.installer_path)
+        installer = str(controller.installer_path.resolve()).replace("'", "''")
+        launcher = subprocess.Popen(
+            [
+                str(Path(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"),
+                "-NoProfile", "-NonInteractive", "-Command",
+                (
+                    "$ErrorActionPreference = 'Stop'; "
+                    f"$process = [System.Diagnostics.Process]::GetProcessById({os.getpid()}); "
+                    "$null = $process.Handle; "
+                    "[Console]::Out.WriteLine('ready'); "
+                    "$process.WaitForExit(); "
+                    f"Start-Process -FilePath '{installer}'"
+                ),
+            ],
+            stdout=subprocess.PIPE,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        # Keep this process alive until the helper holds its process handle.
+        launcher.stdout.readline()
+        launcher.stdout.close()
     return result
 
 

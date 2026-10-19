@@ -697,32 +697,49 @@ def test_project_samples_through_widget_preview_and_rename(controller, qapp, tmp
     qapp.processEvents()
 
 
-def test_installer_launch_waits_for_qt_event_loop_exit(tmp_path):
+def test_installer_launch_waits_for_process_exit(tmp_path):
     import subprocess
     import sys
+    import time
 
     script = """
 import sys
+import time
 from pathlib import Path
 from PySide6.QtCore import QThread, QTimer
 from PySide6.QtWidgets import QApplication
 from app import config
 from app.ui import main_ui
 config.user_config_path = lambda *a, **k: Path(sys.argv[1])
+marker = Path(sys.argv[1]) / 'installer-launched.txt'
+installer = Path(sys.argv[1]) / "update's files" / 'downloaded setup.exe'
 OriginalController = main_ui.Controller
 class UpdateController(OriginalController):
     def __init__(self, folder=None):
         super().__init__()
-        self.installer_path = Path('downloaded-setup.exe')
+        self.installer_path = installer
         QTimer.singleShot(0, self.quitAndInstall)
 main_ui.Controller = UpdateController
-launched = []
-def startfile(path):
+original_popen = main_ui.subprocess.Popen
+def popen(command, **kwargs):
     assert QThread.currentThread().loopLevel() == 0
     assert not any(window.isVisible() for window in QApplication.topLevelWidgets())
-    launched.append(path)
-main_ui.os.startfile = startfile
+    marker_path = str(marker).replace("'", "''")
+    command[-1] = (
+        "function Start-Process { param([string]$FilePath) "
+        f"[IO.File]::WriteAllText('{marker_path}', $FilePath) "
+        "}; " + command[-1]
+    )
+    return original_popen(command, **kwargs)
+main_ui.subprocess.Popen = popen
+
 assert main_ui.main() == 0
-assert launched == [Path('downloaded-setup.exe')]
+time.sleep(1)
+assert not marker.exists()
 """
     subprocess.run([sys.executable, "-c", script, str(tmp_path)], check=True, timeout=30)
+    marker = tmp_path / "installer-launched.txt"
+    deadline = time.monotonic() + 10
+    while not marker.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert marker.read_text() == str(tmp_path / "update's files" / "downloaded setup.exe")

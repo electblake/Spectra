@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Added frame extraction start, completion, and progress messages every 10 videos to the activity log, while keeping warnings immediate.
+- Waited for the Spectra process to exit before launching the update installer.
+
 ## [2.6.0] - 2026-10-19
 
 ### Added
