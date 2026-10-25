@@ -27,7 +27,8 @@ def main():
         create_mutex(None, False, "electblake.Spectra.Running")
 
     no_profile = "-NoProfile" in sys.argv[1:]
-    arguments = [argument for argument in sys.argv[1:] if argument != "-NoProfile"]
+    minimize = "-Minimize" in sys.argv[1:]
+    arguments = [argument for argument in sys.argv[1:] if argument not in {"-NoProfile", "-Minimize"}]
     app = QApplication([sys.argv[0], *arguments])
     app.setApplicationName(APP_NAME)
     app.setOrganizationName(APP_ORGANIZATION)
@@ -35,7 +36,10 @@ def main():
     app.setWindowIcon(QIcon(str(Path(__file__).resolve().parents[2] / "Spectra.ico")))
     controller = Controller(arguments[0] if arguments else None, no_profile=no_profile)
     window = MainWindow(controller)
-    window.show()
+    if minimize:
+        window.showMinimized()
+    else:
+        window.show()
     result = app.exec()
     if controller.install_requested:
         installer = str(controller.installer_path.resolve()).replace("'", "''")

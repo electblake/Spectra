@@ -787,13 +787,15 @@ from PySide6.QtCore import QThread, QTimer
 from PySide6.QtWidgets import QApplication
 from app import config
 from app.ui import main_ui
-config.user_config_path = lambda *a, **k: Path(sys.argv[1])
+config_folder = Path(sys.argv[1])
+config.user_config_path = lambda *a, **k: config_folder
 marker = Path(sys.argv[1]) / 'installer-launched.txt'
 installer = Path(sys.argv[1]) / "update's files" / 'downloaded setup.exe'
 OriginalController = main_ui.Controller
 class UpdateController(OriginalController):
     def __init__(self, folder=None, *, no_profile=False):
         super().__init__(no_profile=no_profile)
+        assert self.no_profile
         self.installer_path = installer
         QTimer.singleShot(0, self.quitAndInstall)
 main_ui.Controller = UpdateController
@@ -810,7 +812,10 @@ def popen(command, **kwargs):
     return original_popen(command, **kwargs)
 main_ui.subprocess.Popen = popen
 
+sys.argv = ["spectra", "-NoProfile", "-Minimize"]
 assert main_ui.main() == 0
+assert not (config_folder / "Spectra.ini").exists()
+assert not (config_folder / "ui.ini").exists()
 time.sleep(1)
 assert not marker.exists()
 """

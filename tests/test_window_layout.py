@@ -24,12 +24,14 @@ def test_layout_debounces_and_restores(controller, qapp, monkeypatch):
     QTest.qWait(400)
     assert save.call_count == 1
     save.reset_mock()
-    window.resizeDocks([window.sorting_docks[1]], [350], Qt.Orientation.Horizontal)
+    height = window.sorting_docks[1].height()
+    window.resizeDocks([window.sorting_docks[1]], [height + 80], Qt.Orientation.Vertical)
     QTest.qWait(50)
     assert not save.called
     QTest.qWait(400)
     assert save.call_count == 1
-    width = window.sorting_docks[1].width()
+    assert window.sorting_docks[1].height() != height
+    height = window.sorting_docks[1].height()
     size = window.size()
     window.close()
     window.deleteLater()
@@ -38,7 +40,7 @@ def test_layout_debounces_and_restores(controller, qapp, monkeypatch):
     restored.show()
     QTest.qWait(50)
     assert restored.size() == size
-    assert restored.sorting_docks[1].width() == width
+    assert restored.sorting_docks[1].height() == height
     restored.close()
     restored.deleteLater()
     qapp.processEvents()

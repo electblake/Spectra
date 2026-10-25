@@ -32,7 +32,7 @@ def test_no_profile_ignores_config_and_never_saves(qapp, tmp_path, monkeypatch, 
     assert controller.settings_path is None
     assert controller.configFolder == str(profile)
     window = MainWindow(controller)
-    window.show()
+    window.showMinimized()
     window.resize(1060, 740)
     window.move_parameters_left.trigger()
     QTest.qWait(400)
@@ -65,7 +65,11 @@ def test_no_profile_ignores_config_and_never_saves(qapp, tmp_path, monkeypatch, 
     (["-NoProfile", "C:/media folder"], "C:/media folder", True),
     (["C:/media folder", "-NoProfile"], "C:/media folder", True),
 ])
-def test_launch_arguments(qapp, tmp_path, monkeypatch, arguments, folder, no_profile):
+@pytest.mark.parametrize("minimize_position", [None, 0, -1])
+def test_launch_arguments(qapp, tmp_path, monkeypatch, arguments, folder, no_profile, minimize_position):
+    arguments = arguments.copy()
+    if minimize_position is not None:
+        arguments.insert(len(arguments) if minimize_position == -1 else minimize_position, "-Minimize")
     monkeypatch.setattr(config, "user_config_path", lambda *args, **kwargs: tmp_path)
     config.save_user_settings(**(config.default_settings() | {"file_prefix": "saved_"}))
     controller_factory = Mock(wraps=Controller)
@@ -83,11 +87,18 @@ def test_launch_arguments(qapp, tmp_path, monkeypatch, arguments, folder, no_pro
     controller = window_factory.call_args.args[0]
     assert controller.settings["folder_path"] == (folder or "")
     assert controller.settings["file_prefix"] == ("" if no_profile else "saved_")
-    application_factory.assert_called_once_with(["spectra", *[arg for arg in arguments if arg != "-NoProfile"]])
-    window_factory.return_value.show.assert_called_once_with()
+    application_factory.assert_called_once_with([
+        "spectra", *[arg for arg in arguments if arg not in {"-NoProfile", "-Minimize"}],
+    ])
+    if minimize_position is not None:
+        window_factory.return_value.showMinimized.assert_called_once_with()
+        window_factory.return_value.show.assert_not_called()
+    else:
+        window_factory.return_value.show.assert_called_once_with()
+        window_factory.return_value.showMinimized.assert_not_called()
 
 
-def test_no_profile_module_launch_offscreen(tmp_path):
+def test_no_profile_minimized_module_launch_offscreen(tmp_path):
     result = subprocess.run(
         [sys.executable, "-c", """
 import runpy
@@ -102,16 +113,17 @@ config.user_config_path = lambda *args, **kwargs: profile
 OriginalWindow = main_ui.MainWindow
 
 class TestWindow(OriginalWindow):
-    def show(self):
+    def showMinimized(self):
         assert self.controller.no_profile
         assert self.controller.settings == config.default_settings()
-        super().show()
+        super().showMinimized()
+        assert self.isMinimized()
         self.resize(1060, 740)
         self.save.click()
         QTimer.singleShot(500, self.close)
 
 main_ui.MainWindow = TestWindow
-sys.argv = ["spectra", "-NoProfile"]
+sys.argv = ["spectra", "-NoProfile", "-Minimize"]
 runpy.run_module("app", run_name="__main__")
 assert not profile.exists()
 """, str(tmp_path)],
