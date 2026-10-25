@@ -1,7 +1,52 @@
 import numpy as np
 import pytest
 
+from app.events import Log
 from app.main import rename_images, rename_media
+
+
+@pytest.mark.parametrize("rename", [rename_images, rename_media])
+@pytest.mark.parametrize("separator", ["_", "-", ""])
+@pytest.mark.parametrize("prefix", ["Lauren_Cohan", "manual_", ""])
+@pytest.mark.parametrize("parse_dates", [False, True])
+def test_shared_separator_in_prefix_and_date(tmp_path, rename, separator, prefix, parse_dates):
+    original = tmp_path / "original-2026-10-25.JPG"
+    original.write_bytes(b"source media")
+    options = {"folder_path": tmp_path} if rename is rename_media else {}
+    rename(
+        [(original, np.zeros(1))], prefix=prefix, separator=separator,
+        parse_dates=parse_dates, backup=False, **options,
+    )
+    expected_prefix = {
+        "Lauren_Cohan": {"_": "Lauren_Cohan_", "-": "Lauren_Cohan-", "": "Lauren_Cohan"},
+        "manual_": {"_": "manual_", "-": "manual_-", "": "manual_"},
+        "": {"_": "", "-": "", "": ""},
+    }[prefix][separator]
+    expected = expected_prefix + "1"
+    if parse_dates:
+        expected += separator + "2026-10-25"
+    expected += ".JPG"
+    assert (tmp_path / expected).read_bytes() == b"source media"
+    assert f'"{original.name}","{expected}"' in (tmp_path / "rename_mapping.csv").read_text()
+
+
+@pytest.mark.parametrize("rename", [rename_images, rename_media])
+@pytest.mark.parametrize("prefix", ["saved_", "saved"])
+@pytest.mark.parametrize("original_name,expected", [
+    ("photo-2026-10-25.JPG", "saved_1_2026-10-25.JPG"),
+    ("photo.JPG", "saved_1.JPG"),
+])
+def test_shared_separator_preview_matches_rename(tmp_path, rename, prefix, original_name, expected):
+    original = tmp_path / original_name
+    original.write_bytes(b"original")
+    items = [(original, np.zeros(1))]
+    events = []
+    options = {"folder_path": tmp_path} if rename is rename_media else {}
+    rename(items, prefix=prefix, parse_dates=True, dry_run=True, report=events.append, **options)
+    assert list(tmp_path.iterdir()) == [original]
+    assert any(isinstance(event, Log) and f"→ {expected}" in event.text for event in events)
+    rename(items, prefix=prefix, parse_dates=True, backup=False, **options)
+    assert (tmp_path / expected).read_bytes() == b"original"
 
 
 @pytest.mark.parametrize("include_existing_temp", [False, True])

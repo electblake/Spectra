@@ -459,6 +459,8 @@ def rename_images(sorted_images: list[tuple[Path, np.ndarray]],
                   mapping_csv_folder: str = MAPPING_CSV_FOLDER,
                   overwrite_mapping_csv: bool = OVERWRITE_MAPPING_CSV) -> None:
     folder = sorted_images[0][0].parent
+    if prefix and not prefix.endswith(separator):
+        prefix += separator
 
     backup_folder = folder / "backup_originals"
     if backup and not dry_run:
@@ -559,6 +561,8 @@ def rename_media(sorted_images: list[tuple[Path, np.ndarray]],
                  mapping_csv_folder: str = MAPPING_CSV_FOLDER,
                  overwrite_mapping_csv: bool = OVERWRITE_MAPPING_CSV) -> None:
     folder = Path(folder_path)
+    if prefix and not prefix.endswith(separator):
+        prefix += separator
     media_files = [
         video_frame_source(image_path, folder)
         for image_path, _ in sorted_images

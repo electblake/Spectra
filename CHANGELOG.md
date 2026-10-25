@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-10-25
+
+### Changed
+
+- Renamed Date separator to Separator and moved it directly below the prefix controls in the Renaming dock.
+- Shared the saved separator, defaulting to `_`, between nonempty prefixes and counters and between counters and parsed dates for both image and video renaming.
+
+### Fixed
+
+- Avoided adding a duplicate separator when the prefix already ends with the selected separator, preserving existing saved prefixes.
+
 ## [2.7.0] - 2026-10-25
 
 ### Added

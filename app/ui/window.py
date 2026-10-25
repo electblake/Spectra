@@ -166,14 +166,14 @@ class MainWindow(QMainWindow):
 
         renaming = QWidget()
         form = QFormLayout(renaming)
-        form.addRow("&Prefix:", self._text("file_prefix", "Prefix (used exactly as entered)"))
+        form.addRow("&Prefix:", self._text("file_prefix", "Prefix (followed by Separator)"))
         folder_index = self._number("prefix_folder_index", "Prefix folder index", -2147483647, 0)
         folder_index.setToolTip("0 selects the input folder name; -1 selects its parent; -2 selects the next parent.")
         form.addRow(self._check("prefix_from_folder", "Prefix from &Folder:"), folder_index)
+        form.addRow("Separator:", self._text("separator", "Separator after prefix and before parsed date"))
         form.addRow("Start counting at:", self._number("count_start", "Start counting at", 0, 2147483647))
         form.addRow(self._check("parse_dates", "Parse file dates"))
         form.addRow("Date pattern:", self._text("date_pattern", "Date pattern (regular expression)"))
-        form.addRow("Date separator:", self._text("separator", "Separator before parsed date"))
         mapping_folder = self._text("mapping_csv_folder", "Mapping CSV folder")
         mapping_hint = (
             "{workFolder} is the input folder. Use {workFolder}/Data for a subfolder "

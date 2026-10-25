@@ -16,6 +16,39 @@ from app.events import Log, Progress
 from app.ui.window import MainWindow
 
 
+def test_shared_separator_layout_and_saved_controls(controller, qapp):
+    from app.ui.controller import Controller
+
+    controller.setSetting("folder_path", "F:/Television/Lauren_Cohan/photo")
+    window = MainWindow(controller)
+    separator = window.fields["separator"]
+    prefix = window.fields["file_prefix"]
+    enabled = window.fields["prefix_from_folder"]
+    layout = prefix.parentWidget().layout()
+    assert layout.labelForField(separator).text() == "Separator:"
+    assert layout.getWidgetPosition(separator)[0] == layout.getWidgetPosition(enabled)[0] + 1
+    assert separator.text() == "_"
+    controller.setSetting("parse_dates", False)
+    assert separator.isEnabled()
+    separator.selectAll()
+    QTest.keyClicks(separator, "-")
+    enabled.click()
+    window.fields["prefix_folder_index"].setValue(-1)
+    window.save.click()
+    reopened = Controller()
+    assert reopened.settings["separator"] == "-"
+    assert reopened.settings["file_prefix"] == "Lauren_Cohan"
+    assert reopened.settings["prefix_from_folder"] is True
+    assert reopened.settings["prefix_folder_index"] == -1
+    window.reset.click()
+    assert separator.text() == "_"
+    assert prefix.text() == ""
+    assert not enabled.isChecked()
+    window.close()
+    window.deleteLater()
+    qapp.processEvents()
+
+
 def test_folder_prefix_live_updates_and_persistence(controller, qapp):
     controller.setSetting("folder_path", "F:/Television/Lauren_Cohan/photo/")
     window = MainWindow(controller)

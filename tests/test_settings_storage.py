@@ -9,11 +9,29 @@ from PySide6.QtCore import QSettings
 from app import config, integrations
 
 
+def test_existing_separator_and_prefix_settings_are_preserved(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "user_config_path", lambda *args, **kwargs: tmp_path)
+    settings = QSettings(str(tmp_path / "Spectra.ini"), QSettings.Format.IniFormat)
+    settings.setValue("renaming/file_prefix", "saved_")
+    settings.setValue("renaming/separator", "_")
+    settings.sync()
+    loaded, _ = config.read_user_settings()
+    assert loaded["file_prefix"] == "saved_"
+    assert loaded["separator"] == "_"
+    assert loaded["prefix_from_folder"] is False
+    assert loaded["prefix_folder_index"] == 0
+    config.save_user_settings(**loaded)
+    assert config.read_user_settings()[0] == loaded
+
+
 def test_qsettings_round_trip_in_fresh_process(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "user_config_path", lambda *args, **kwargs: tmp_path)
     values = config.default_settings() | {
         "folder_path": r"C:\media\2026\日本語",
         "file_prefix": "@prefix, 50% é_",
+        "prefix_from_folder": True,
+        "prefix_folder_index": -2,
+        "separator": "-",
         "date_pattern": r"(?P<date>\d{4}\.\d{2}\.\d{2})",
         "dry_run": False,
         "backup": True,
