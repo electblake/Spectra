@@ -35,6 +35,8 @@ class RunRequest:
     resize_optimization: str
     mapping_csv_folder: str
     overwrite_mapping_csv: bool
+    prefix_from_folder: bool = False
+    prefix_folder_index: int = 0
 
 
 @dataclass(frozen=True)
@@ -44,6 +46,10 @@ class RunResult:
 
 
 def run_sorting(request, stop, report):
+    prefix = request.file_prefix
+    if request.prefix_from_folder:
+        path = Path(request.folder_path)
+        prefix = path.relative_to(path.anchor).parts[request.prefix_folder_index - 1]
     report(Log(f"Folder: {request.folder_path}"))
     report(Log(f"Run settings: {request}"))
     images = main.get_image_files(request.folder_path, stop, report=report)
@@ -67,7 +73,7 @@ def run_sorting(request, stop, report):
     if stop.is_set():
         return RunResult(request, stopped=True)
     options = {
-        "prefix": request.file_prefix, "dry_run": request.dry_run, "backup": request.backup,
+        "prefix": prefix, "dry_run": request.dry_run, "backup": request.backup,
         "parse_dates": request.parse_dates, "date_pattern": request.date_pattern,
         "separator": request.separator, "count_start": request.count_start,
         "stop_event": stop, "report": report,

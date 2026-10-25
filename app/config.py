@@ -34,6 +34,8 @@ SEPARATOR = "_"
 COUNT_START = 1
 FOLDER_PATH = ""
 FILE_PREFIX = ""
+PREFIX_FROM_FOLDER = False
+PREFIX_FOLDER_INDEX = 0
 MAPPING_CSV_FOLDER = "{workFolder}"
 OVERWRITE_MAPPING_CSV = False
 
@@ -73,6 +75,8 @@ def default_settings() -> dict:
         "count_start": COUNT_START,
         "folder_path": FOLDER_PATH,
         "file_prefix": FILE_PREFIX,
+        "prefix_from_folder": PREFIX_FROM_FOLDER,
+        "prefix_folder_index": PREFIX_FOLDER_INDEX,
         "mapping_csv_folder": MAPPING_CSV_FOLDER,
         "overwrite_mapping_csv": OVERWRITE_MAPPING_CSV,
     }
@@ -95,6 +99,8 @@ SETTINGS_KEYS = {
     "include_videos": "general/include_videos",
     "folder_path": "general/folder_path",
     "file_prefix": "renaming/file_prefix",
+    "prefix_from_folder": "renaming/prefix_from_folder",
+    "prefix_folder_index": "renaming/prefix_folder_index",
     "mapping_csv_folder": "renaming/mapping_csv_folder",
     "overwrite_mapping_csv": "renaming/overwrite_mapping_csv",
     "similarity_threshold": "clustering/similarity_threshold",
@@ -176,6 +182,8 @@ def _read_legacy_settings(settings_path: Path) -> dict:
         settings.read_file(settings_file)
 
     return {
+        "prefix_from_folder": PREFIX_FROM_FOLDER,
+        "prefix_folder_index": PREFIX_FOLDER_INDEX,
         "mapping_csv_folder": MAPPING_CSV_FOLDER,
         "overwrite_mapping_csv": OVERWRITE_MAPPING_CSV,
         "feature_workers": settings.getint("performance", "feature_workers"),

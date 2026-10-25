@@ -16,6 +16,50 @@ from app.events import Log, Progress
 from app.ui.window import MainWindow
 
 
+def test_folder_prefix_live_updates_and_persistence(controller, qapp):
+    controller.setSetting("folder_path", "F:/Television/Lauren_Cohan/photo/")
+    window = MainWindow(controller)
+    prefix = window.fields["file_prefix"]
+    enabled = window.fields["prefix_from_folder"]
+    index = window.fields["prefix_folder_index"]
+    layout = prefix.parentWidget().layout()
+    assert layout.getWidgetPosition(enabled)[0] == layout.getWidgetPosition(prefix)[0] + 1
+    assert index.value() == 0
+    assert index.maximum() == 0
+    assert not enabled.isChecked()
+    assert not index.isEnabled()
+    enabled.click()
+    assert not prefix.isEnabled()
+    assert index.isEnabled()
+    assert prefix.text() == "photo"
+    index.setValue(-1)
+    assert prefix.text() == "Lauren_Cohan"
+    index.setValue(-2)
+    assert prefix.text() == "Television"
+    index.setValue(-1)
+    controller.setSetting("folder_path", "F:/Television/Other_Person/video")
+    assert prefix.text() == "Other_Person"
+    assert application.RunRequest(**controller.settings).file_prefix == "Other_Person"
+    window.save.click()
+    assert config.read_user_settings()[0] == controller.settings
+    from app.ui.controller import Controller
+    reopened = Controller(folder="F:/Television/New_Person/photo")
+    assert reopened.settings["file_prefix"] == "New_Person"
+    enabled.click()
+    assert prefix.isEnabled()
+    prefix.selectAll()
+    QTest.keyClicks(prefix, "manual_")
+    controller.setSetting("folder_path", "F:/Television/Another_Person/photo")
+    assert prefix.text() == "manual_"
+    window.reset.click()
+    assert not enabled.isChecked()
+    assert index.value() == 0
+    assert prefix.isEnabled()
+    window.close()
+    window.deleteLater()
+    qapp.processEvents()
+
+
 def test_file_menu_select_folder(controller, qapp, monkeypatch, tmp_path):
     window = MainWindow(controller)
     menus = window.menuBar().actions()

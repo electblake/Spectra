@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-10-25
+
+### Added
+
+- Added a saved Prefix from Folder checkbox and nonpositive folder index beneath Prefix in the Renaming dock; index `0` selects the input folder and `-1` selects its parent.
+- Updated folder-derived prefixes live when the folder or index changes, with manual prefix editing disabled while enabled.
+
+### Fixed
+
+- Derived the prefix again when sorting starts so folder-prefix requests cannot rename files using a stale stored prefix.
+- Excluded drive and network-share roots from folder-prefix selection.
+- Kept settings unchanged when a folder-prefix selection fails, preventing partially applied settings from being saved.
+
 ## [2.6.1] - 2026-10-19
 
 ### Fixed

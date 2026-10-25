@@ -37,6 +37,11 @@ class Controller(QObject):
         self._config_folder = str(config.settings_file().parent)
         if folder is not None:
             self._settings["folder_path"] = folder
+        if self._settings["prefix_from_folder"]:
+            path = Path(self._settings["folder_path"])
+            self._settings["file_prefix"] = path.relative_to(path.anchor).parts[
+                self._settings["prefix_folder_index"] - 1
+            ]
         self._busy = False
         self._status = "Ready"
         self._fraction = 0.0
@@ -113,7 +118,15 @@ class Controller(QObject):
 
     @Slot(str, "QVariant")
     def setSetting(self, key, value):
-        self._settings[key] = type(config.default_settings()[key])(value)
+        settings = self._settings | {key: type(config.default_settings()[key])(value)}
+        if settings["prefix_from_folder"] and key in {
+            "folder_path", "prefix_from_folder", "prefix_folder_index",
+        }:
+            path = Path(settings["folder_path"])
+            settings["file_prefix"] = path.relative_to(path.anchor).parts[
+                settings["prefix_folder_index"] - 1
+            ]
+        self._settings = settings
         self.settingsChanged.emit()
 
     @Slot()
