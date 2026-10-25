@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.8.1] - 2026-10-25
+
 ### Added
 
 - Added the optional `-NoProfile` launch argument to use default settings without reading user configuration or saving settings and window layout, with support for an optional media folder before or after the flag.
