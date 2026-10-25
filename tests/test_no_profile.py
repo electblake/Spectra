@@ -98,7 +98,8 @@ def test_launch_arguments(qapp, tmp_path, monkeypatch, arguments, folder, no_pro
         window_factory.return_value.showMinimized.assert_not_called()
 
 
-def test_no_profile_minimized_module_launch_offscreen(tmp_path):
+@pytest.mark.parametrize("saved_folder", ["", "C:/saved media folder"])
+def test_no_profile_minimized_module_launch_offscreen(tmp_path, saved_folder):
     result = subprocess.run(
         [sys.executable, "-c", """
 import runpy
@@ -110,12 +111,17 @@ from app.ui import main_ui
 
 profile = Path(sys.argv[1]) / "profile"
 config.user_config_path = lambda *args, **kwargs: profile
+if sys.argv[2]:
+    config.save_user_settings(**(config.default_settings() | {"folder_path": sys.argv[2]}))
+original = {path: path.read_bytes() for path in profile.glob("*")}
 OriginalWindow = main_ui.MainWindow
 
 class TestWindow(OriginalWindow):
     def showMinimized(self):
         assert self.controller.no_profile
         assert self.controller.settings == config.default_settings()
+        assert self.fields["folder_path"].text() == ""
+        assert not self.start.isEnabled()
         super().showMinimized()
         assert self.isMinimized()
         self.resize(1060, 740)
@@ -125,8 +131,9 @@ class TestWindow(OriginalWindow):
 main_ui.MainWindow = TestWindow
 sys.argv = ["spectra", "-NoProfile", "-Minimize"]
 runpy.run_module("app", run_name="__main__")
-assert not profile.exists()
-""", str(tmp_path)],
+assert {path: path.read_bytes() for path in profile.glob("*")} == original
+assert profile.exists() == bool(original)
+""", str(tmp_path), saved_folder],
         env=os.environ | {"QT_QPA_PLATFORM": "offscreen"},
         check=True,
         capture_output=True,

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.8.2] - 2026-10-25
+
+### Added
+
+- Added launch regression coverage confirming that `-NoProfile` leaves Input Folder empty when a media folder is saved and preserves the existing profile files.
+
+### Changed
+
+- Replaced the demo screenshot with a fresh `-NoProfile` session showing an empty Input Folder.
+
 ## [2.8.1] - 2026-10-25
 
 ### Added
