@@ -792,8 +792,8 @@ marker = Path(sys.argv[1]) / 'installer-launched.txt'
 installer = Path(sys.argv[1]) / "update's files" / 'downloaded setup.exe'
 OriginalController = main_ui.Controller
 class UpdateController(OriginalController):
-    def __init__(self, folder=None):
-        super().__init__()
+    def __init__(self, folder=None, *, no_profile=False):
+        super().__init__(no_profile=no_profile)
         self.installer_path = installer
         QTimer.singleShot(0, self.quitAndInstall)
 main_ui.Controller = UpdateController

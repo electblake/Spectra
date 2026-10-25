@@ -31,10 +31,15 @@ class Controller(QObject):
     completed = Signal(bool)
     closeReady = Signal()
 
-    def __init__(self, folder=None):
+    def __init__(self, folder=None, *, no_profile=False):
         super().__init__()
-        self._settings, self.settings_path = config.read_user_settings()
-        self._config_folder = str(config.settings_file().parent)
+        self.no_profile = no_profile
+        if no_profile:
+            self._settings, self.settings_path = config.default_settings(), None
+            self._config_folder = str(config.user_config_path(config.APP_NAME, appauthor=False, roaming=True))
+        else:
+            self._settings, self.settings_path = config.read_user_settings()
+            self._config_folder = str(config.settings_file().parent)
         if folder is not None:
             self._settings["folder_path"] = folder
         if self._settings["prefix_from_folder"]:
@@ -131,6 +136,9 @@ class Controller(QObject):
 
     @Slot()
     def saveSettings(self):
+        if self.no_profile:
+            self.logMessage.emit("Settings are not saved in -NoProfile mode.")
+            return
         config.save_user_settings(config_folder=self._config_folder, **self._settings)
         self.settings_path = config.settings_file()
         self._config_folder = str(self.settings_path.parent)

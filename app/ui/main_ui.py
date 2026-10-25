@@ -26,12 +26,14 @@ def main():
         # Windows keeps this mutex alive until the process exits.
         create_mutex(None, False, "electblake.Spectra.Running")
 
-    app = QApplication(sys.argv)
+    no_profile = "-NoProfile" in sys.argv[1:]
+    arguments = [argument for argument in sys.argv[1:] if argument != "-NoProfile"]
+    app = QApplication([sys.argv[0], *arguments])
     app.setApplicationName(APP_NAME)
     app.setOrganizationName(APP_ORGANIZATION)
     app.setApplicationVersion(APP_VERSION)
     app.setWindowIcon(QIcon(str(Path(__file__).resolve().parents[2] / "Spectra.ico")))
-    controller = Controller(sys.argv[1] if len(sys.argv) > 1 else None)
+    controller = Controller(arguments[0] if arguments else None, no_profile=no_profile)
     window = MainWindow(controller)
     window.show()
     result = app.exec()

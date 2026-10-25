@@ -80,7 +80,7 @@ class MainWindow(QMainWindow):
         controller.completed.connect(self._show_completion)
         controller.closeReady.connect(self.close)
         self._sync_settings()
-        saved_layout = config.read_window_layout()
+        saved_layout = {} if controller.no_profile else config.read_window_layout()
         if "geometry" in saved_layout:
             self.restoreGeometry(saved_layout["geometry"])
         if "main_window_state" in saved_layout:
@@ -424,6 +424,8 @@ class MainWindow(QMainWindow):
 
     def _save_layout(self):
         self.layout_save_timer.stop()
+        if self.controller.no_profile:
+            return
         config.save_window_layout(self.saveGeometry(), self.saveState())
 
     def closeEvent(self, event):

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added the optional `-NoProfile` launch argument to use default settings without reading user configuration or saving settings and window layout, with support for an optional media folder before or after the flag.
+- Added regression tests for profile isolation, launch arguments, and offscreen startup without creating profile files.
+
+### Changed
+
+- Shortened the README and moved detailed instructions into a dedicated usage guide.
+
 ## [2.8.0] - 2026-10-25
 
 ### Changed
