@@ -41,8 +41,8 @@ def test_no_profile_ignores_config_and_never_saves(qapp, tmp_path, monkeypatch, 
     controller.setConfigFolder(str(tmp_path / "custom"))
     messages = []
     controller.logMessage.connect(messages.append)
-    window.save.click()
-    assert messages == ["Settings are not saved in -NoProfile mode."]
+    controller.saveSettings()
+    assert messages == []
     assert controller.settings["file_prefix"] == "temporary_"
     assert controller.settings_path is None
     window.reset_layout.trigger()
@@ -125,7 +125,7 @@ class TestWindow(OriginalWindow):
         super().showMinimized()
         assert self.isMinimized()
         self.resize(1060, 740)
-        self.save.click()
+        self.controller.setSetting("file_prefix", "temporary_")
         QTimer.singleShot(500, self.close)
 
 main_ui.MainWindow = TestWindow

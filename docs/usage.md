@@ -31,8 +31,9 @@
 - **Video frame workers:** concurrent video extraction processes; default 1, with one decoder thread per worker.
 - **PNG compression level:** compression for extracted frames, from 0 to 9; default 1. Lower levels encode faster and produce larger files without changing pixels.
 - **Resize optimization:** Default uses LANCZOS; Low, Medium, and High use Pillow `reducing_gap` values of 3.0, 2.0, and 1.0. Stronger optimization may change similarity scores and ordering. Analysis uses 100 × 100 pixels without modifying originals.
-- Changes apply to the next run. Use **Save Settings** to persist options and **Restore Defaults** to reset them.
-- **Config path** selects the configuration folder; **Open Config Folder** opens it. Settings are stored in `Spectra.ini`.
+- Changes apply to the next run and save automatically. Settings, window geometry, dock layout, visibility, and panel scroll positions persist between launches, with a final save when the app exits.
+- Launch with `-NoProfile` to use defaults without reading or saving your profile; add `-Minimize` to start minimized.
+- **Config path** selects the configuration folder; finish editing or use **Browse** to save the selection. **Open Config Folder** opens it. Options are stored in `Spectra.ini`; window layout is stored in the user configuration directory's `ui.ini`.
 
 ## How sorting works
 
@@ -44,6 +45,7 @@
 ## Installation and updates
 
 - The Windows installer installs for the current user and offers an optional desktop shortcut.
-- Use **Extras > Check for Updates** to check for a newer release and download its installer.
+- Use **Help > Check for updates** to check for a newer release and download its installer.
 - Uninstall through Windows **Installed apps**.
-- For a portable copy, download `Spectra-*-windows-amd64-portable.zip` from the [latest release](https://github.com/electblake/Spectra/releases/latest), extract the entire archive, and run its executable.
+- Download the Windows Setup executable from the [latest release](https://github.com/electblake/Spectra/releases/latest).
+- Use **Help > Install in File Explorer** to add folder context-menu integration.

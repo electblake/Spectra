@@ -130,16 +130,17 @@ def read_window_layout() -> dict:
     settings.setFallbacksEnabled(False)
     return {
         key: settings.value(f"layout/{key}")
-        for key in ("geometry", "main_window_state")
+        for key in ("geometry", "main_window_state", "scroll_positions")
         if settings.contains(f"layout/{key}")
     }
 
 
-def save_window_layout(geometry, main_window_state) -> None:
+def save_window_layout(geometry, main_window_state, scroll_positions) -> None:
     settings = QSettings(str(user_config_path(APP_NAME, appauthor=False, roaming=True) / "ui.ini"), QSettings.Format.IniFormat)
     settings.setFallbacksEnabled(False)
     settings.setValue("layout/geometry", geometry)
     settings.setValue("layout/main_window_state", main_window_state)
+    settings.setValue("layout/scroll_positions", scroll_positions)
     settings.sync()
 
 

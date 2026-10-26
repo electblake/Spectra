@@ -7,14 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-10-26
+
 ### Changed
 
+- Automatically saved all app options and config-folder changes through QSettings, with a final save on close and application quit.
+- Persisted panel scroll positions alongside window geometry and dock layout while preserving `-NoProfile` isolation.
+- Updated usage instructions for automatic settings persistence and the Help dialogs.
 - Moved File Explorer integration from Extras to Help → Install in File Explorer, opening a compact dialog without a group box.
 - Moved updates to Help → Check for updates, with the app name, current version, check and download controls, download progress, and Quit and Install enabled after downloading.
 
 ### Removed
 
 - Removed the Extras tab from the Parameters dock.
+- Removed the manual Save Settings and Restore Defaults buttons while retaining config-folder controls.
+
+### Fixed
+
+- Preserved dock visibility when the application quit after closing its main window.
+- Restored saved scroll offsets when hidden panels were reopened after restarting.
+- Cancelled pending scroll restoration when the owning window was destroyed.
 
 ## [2.8.2] - 2026-10-25
 

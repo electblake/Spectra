@@ -41,13 +41,12 @@ def test_shared_separator_layout_and_saved_controls(controller, qapp):
     QTest.keyClicks(separator, "-")
     enabled.click()
     window.fields["prefix_folder_index"].setValue(-1)
-    window.save.click()
     reopened = Controller()
     assert reopened.settings["separator"] == "-"
     assert reopened.settings["file_prefix"] == "Lauren_Cohan"
     assert reopened.settings["prefix_from_folder"] is True
     assert reopened.settings["prefix_folder_index"] == -1
-    window.reset.click()
+    controller.restoreDefaults()
     assert separator.text() == "_"
     assert prefix.text() == ""
     assert not enabled.isChecked()
@@ -80,7 +79,6 @@ def test_folder_prefix_live_updates_and_persistence(controller, qapp):
     controller.setSetting("folder_path", "F:/Television/Other_Person/video")
     assert prefix.text() == "Other_Person"
     assert application.RunRequest(**controller.settings).file_prefix == "Other_Person"
-    window.save.click()
     assert config.read_user_settings()[0] == controller.settings
     from app.ui.controller import Controller
     reopened = Controller(folder="F:/Television/New_Person/photo")
@@ -91,7 +89,7 @@ def test_folder_prefix_live_updates_and_persistence(controller, qapp):
     QTest.keyClicks(prefix, "manual_")
     controller.setSetting("folder_path", "F:/Television/Another_Person/photo")
     assert prefix.text() == "manual_"
-    window.reset.click()
+    controller.restoreDefaults()
     assert not enabled.isChecked()
     assert index.value() == 0
     assert prefix.isEnabled()
@@ -132,9 +130,8 @@ def test_mapping_csv_folder_edit_save_and_restore(controller, qapp):
     QTest.keyClick(field, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
     QTest.keyClicks(field, "{workFolder}/../Data")
     assert controller.settings["mapping_csv_folder"] == "{workFolder}/../Data"
-    window.save.click()
     assert config.read_user_settings()[0]["mapping_csv_folder"] == "{workFolder}/../Data"
-    window.reset.click()
+    controller.restoreDefaults()
     assert field.text() == "{workFolder}"
     window.close()
     window.deleteLater()
@@ -151,9 +148,8 @@ def test_overwrite_mapping_csv_checkbox_save_and_restore(controller, qapp):
     assert not field.isChecked()
     field.click()
     assert controller.settings["overwrite_mapping_csv"] is True
-    window.save.click()
     assert config.read_user_settings()[0]["overwrite_mapping_csv"] is True
-    window.reset.click()
+    controller.restoreDefaults()
     assert not field.isChecked()
     window.close()
     window.deleteLater()
@@ -171,8 +167,6 @@ def test_settings_config_folder_picker_save_and_open(controller, qapp, tmp_path,
     browse = window.findChild(QPushButton, "browseConfigFolder")
     QTest.mouseClick(browse, Qt.MouseButton.LeftButton)
     assert window.config_path.text() == str(chosen)
-    assert config.settings_file() == tmp_path / "Spectra.ini"
-    QTest.mouseClick(window.save, Qt.MouseButton.LeftButton)
     assert config.settings_file() == chosen / "Spectra.ini"
     assert config.read_user_settings()[0] == controller.settings
     opened = Mock()
@@ -187,8 +181,6 @@ def test_settings_config_folder_picker_save_and_open(controller, qapp, tmp_path,
     assert window.config_path.text() == str(tmp_path)
     assert controller.configFolder == str(tmp_path)
     assert controller.settings == settings
-    assert config.settings_file() == chosen / "Spectra.ini"
-    QTest.mouseClick(window.save, Qt.MouseButton.LeftButton)
     assert config.settings_file() == tmp_path / "Spectra.ini"
     assert config.read_user_settings()[0] == settings
     window.close()
@@ -290,15 +282,11 @@ def test_help_explorer_install_and_release_actions(controller, qapp, monkeypatch
     assert entered.wait(5)
     assert not dialog.install.isEnabled()
     assert not window.settings_options.isEnabled()
-    assert not window.save.isEnabled()
-    assert not window.reset.isEnabled()
     release.set()
     finish_task(controller)
     installed.assert_called_once()
     assert dialog.install.isEnabled()
     assert window.settings_options.isEnabled()
-    assert window.save.isEnabled()
-    assert window.reset.isEnabled()
     assert dialog.status.text() == "Installed in File Explorer"
     dialog.reject()
     window.close()
@@ -460,6 +448,7 @@ def test_qt_run_through_real_analysis_and_rename(controller, tmp_path, dry_run):
     outcomes = []
     controller.logMessage.connect(messages.append)
     controller.completed.connect(outcomes.append)
+    original_files = {p.name: p.read_bytes() for p in tmp_path.iterdir()}
     controller.start()
     finish_task(controller)
     assert outcomes == [dry_run]
@@ -467,7 +456,7 @@ def test_qt_run_through_real_analysis_and_rename(controller, tmp_path, dry_run):
     assert controller.fraction == 1.0
     assert any("red.png →" in message for message in messages)
     if dry_run:
-        assert {p.name: p.read_bytes() for p in tmp_path.iterdir()} == originals
+        assert {p.name: p.read_bytes() for p in tmp_path.iterdir()} == original_files
     else:
         assert {p.read_bytes() for p in tmp_path.glob("sorted_*.png")} == set(originals.values())
         assert {p.name: p.read_bytes() for p in (tmp_path / "backup_originals").iterdir()} == originals
@@ -488,12 +477,13 @@ def test_qt_stop_during_real_analysis(controller, tmp_path, monkeypatch):
             controller.stop()
 
     controller.stateChanged.connect(stop_at_features)
+    original_files = {p.name: p.read_bytes() for p in tmp_path.iterdir()}
     controller.start()
     finish_task(controller)
     assert controller.stopping
     assert controller.status == "Sorting stopped"
     assert outcomes == []
-    assert list(tmp_path.iterdir()) == [image]
+    assert {p.name: p.read_bytes() for p in tmp_path.iterdir()} == original_files
 
 
 def test_widget_tabs_resize_editing_and_log(controller, qapp):
@@ -512,10 +502,10 @@ def test_widget_tabs_resize_editing_and_log(controller, qapp):
     assert tabs.currentIndex() == 0
     assert window.start.isVisible()
     assert window.log.isVisible()
-    assert window.save.isVisible()
+    assert window.settings_options.isVisible()
     QTest.keyClick(tab_bar, Qt.Key.Key_Tab, Qt.KeyboardModifier.ControlModifier)
     assert tabs.currentIndex() == 0
-    assert window.save.isVisible()
+    assert window.settings_options.isVisible()
     assert window.parameters_dock.isAncestorOf(window.settings_options)
     window.fields["feature_workers"].setValue(6)
     assert controller.settings["feature_workers"] == 6
@@ -603,9 +593,8 @@ def test_relocated_parameters_save_restore_and_central_content(controller, qapp)
     resize.setFocus()
     QTest.keyClick(resize, Qt.Key.Key_End)
     assert controller.settings["resize_optimization"] == "High"
-    window.save.click()
     assert config.read_user_settings()[0] == controller.settings
-    window.reset.click()
+    controller.restoreDefaults()
     assert controller.settings == config.default_settings()
     for key in values:
         assert window.fields[key].value() == config.default_settings()[key]
@@ -675,9 +664,8 @@ def test_moved_sorting_docks_keep_controls_connected(controller, qapp, monkeypat
     window.fields["count_start"].setValue(42)
     assert controller.settings["file_prefix"] == "dock_"
     assert controller.settings["count_start"] == 42
-    window.save.click()
     assert config.read_user_settings()[0] == controller.settings
-    window.reset.click()
+    controller.restoreDefaults()
     assert controller.settings == config.default_settings()
     assert window.fields["file_prefix"].text() == ""
     window.close()

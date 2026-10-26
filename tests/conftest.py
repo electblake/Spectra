@@ -17,7 +17,7 @@ def isolated_video_cache(tmp_path, monkeypatch):
 
 @pytest.fixture(scope="session")
 def qapp():
-    app = QApplication([])
+    app = QApplication(["pytest", "-platform", "offscreen:configfile=tests/offscreen.json"])
     app.setQuitOnLastWindowClosed(False)
     return app
 

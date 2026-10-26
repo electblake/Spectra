@@ -33,6 +33,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.controller = controller
         self.fields = {}
+        self.scroll_areas = {}
         self.setWindowTitle(controller.title)
         self.resize(1100, 760)
         self._sorting_docks()
@@ -99,12 +100,20 @@ class MainWindow(QMainWindow):
             dock.topLevelChanged.connect(lambda floating: self.layout_save_timer.start())
             dock.visibilityChanged.connect(self._dock_visibility_changed)
             dock.installEventFilter(self)
-        self.save.clicked.connect(self._save_layout)
+        self.pending_scroll_positions = {}
+        if "scroll_positions" in saved_layout:
+            self.pending_scroll_positions = saved_layout["scroll_positions"]
+        for scroll in self.scroll_areas.values():
+            scroll.installEventFilter(self)
+            for bar in (scroll.horizontalScrollBar(), scroll.verticalScrollBar()):
+                bar.valueChanged.connect(lambda value: self.layout_save_timer.start())
+        self._schedule_scroll_restore()
+        QApplication.instance().aboutToQuit.connect(self._save_settings)
         self.installEventFilter(self)
 
     def _text(self, key, label):
         field = QLineEdit()
-        field.textEdited.connect(lambda text: self.controller.setSetting(key, text))
+        field.textChanged.connect(lambda text: self.controller.setSetting(key, text))
         self._register(key, label, field)
         return field
 
@@ -120,7 +129,7 @@ class MainWindow(QMainWindow):
 
     def _check(self, key, label):
         field = QCheckBox(label)
-        field.clicked.connect(lambda checked: self.controller.setSetting(key, checked))
+        field.toggled.connect(lambda checked: self.controller.setSetting(key, checked))
         self._register(key, label, field)
         return field
 
@@ -202,6 +211,7 @@ class MainWindow(QMainWindow):
             scroll.setFrameShape(QScrollArea.Shape.NoFrame)
             scroll.setWidget(content)
             dock.setWidget(scroll)
+            self.scroll_areas[name] = scroll
             area = Qt.DockWidgetArea.TopDockWidgetArea if name == "mediaDock" else Qt.DockWidgetArea.LeftDockWidgetArea
             self.addDockWidget(area, dock)
             self.sorting_docks.append(dock)
@@ -256,7 +266,7 @@ class MainWindow(QMainWindow):
         form.addRow("PNG compression level:", self._number("png_compress_level", "PNG compression level", 0, 9))
         resize = QComboBox()
         resize.addItems(["Default", "Low", "Medium", "High"])
-        resize.textActivated.connect(lambda value: self.controller.setSetting("resize_optimization", value))
+        resize.currentTextChanged.connect(lambda value: self.controller.setSetting("resize_optimization", value))
         self._register("resize_optimization", "Resize optimization", resize)
         resize.setToolTip("Analysis remains 100 × 100 pixels. Stronger optimization is faster and may change similarity results; originals are unchanged.")
         form.addRow("Resize optimization:", resize)
@@ -265,7 +275,9 @@ class MainWindow(QMainWindow):
         self.config_path = QLineEdit(self.controller.configFolder)
         self.config_path.setObjectName("configPath")
         self.config_path.setAccessibleName("Config path")
-        self.config_path.textEdited.connect(self.controller.setConfigFolder)
+        self.config_path.editingFinished.connect(
+            lambda: self.controller.setConfigFolder(self.config_path.text())
+        )
         config_row.addWidget(self.config_path)
         browse_config = QPushButton("Browse…")
         browse_config.setObjectName("browseConfigFolder")
@@ -289,17 +301,8 @@ class MainWindow(QMainWindow):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(self.settings_options)
+        self.scroll_areas["parameters"] = scroll
         layout.addWidget(scroll)
-        layout.addWidget(QLabel("Save Settings stores all options in the selected config folder."))
-        actions = QHBoxLayout()
-        self.save = QPushButton("Save Settings")
-        self.save.clicked.connect(self.controller.saveSettings)
-        self.reset = QPushButton("Restore Defaults")
-        self.reset.clicked.connect(self.controller.restoreDefaults)
-        actions.addWidget(self.save)
-        actions.addWidget(self.reset)
-        actions.addStretch()
-        layout.addLayout(actions)
         return page
 
     def _install_explorer(self):
@@ -331,7 +334,7 @@ class MainWindow(QMainWindow):
         self.select_folder.setEnabled(not controller.busy)
         for dock in self.sorting_docks:
             dock.widget().setEnabled(not controller.busy)
-        for widget in (self.run_options, self.settings_options, self.save, self.reset,
+        for widget in (self.run_options, self.settings_options,
                        self.install_explorer, self.check_updates):
             widget.setEnabled(not controller.busy)
         self.fields["similarity_threshold"].setEnabled(not settings["auto_determine"])
@@ -390,6 +393,8 @@ class MainWindow(QMainWindow):
     def eventFilter(self, watched, event):
         if watched in (self, *self.sorting_docks, self.parameters_dock) and event.type() in (QEvent.Type.Move, QEvent.Type.Resize, QEvent.Type.WindowStateChange):
             self.layout_save_timer.start()
+        if watched in self.scroll_areas.values() and event.type() == QEvent.Type.Show:
+            self._schedule_scroll_restore()
         return super().eventFilter(watched, event)
 
     def _dock_visibility_changed(self, visible):
@@ -406,14 +411,37 @@ class MainWindow(QMainWindow):
         self.restoreState(self.default_layout)
         self._save_layout()
 
+    def _schedule_scroll_restore(self):
+        # Dock geometry and scroll ranges settle in separate event-loop passes.
+        QTimer.singleShot(0, self, lambda: QTimer.singleShot(0, self, self._restore_scroll_positions))
+
+    def _restore_scroll_positions(self):
+        for name, scroll in self.scroll_areas.items():
+            if scroll.isVisible() and name in self.pending_scroll_positions:
+                bars = (scroll.horizontalScrollBar(), scroll.verticalScrollBar())
+                for bar, value in zip(bars, self.pending_scroll_positions.pop(name)):
+                    bar.setValue(value)
+
     def _save_layout(self):
         self.layout_save_timer.stop()
         if self.controller.no_profile:
             return
-        config.save_window_layout(self.saveGeometry(), self.saveState())
+        scroll_positions = {
+            name: [scroll.horizontalScrollBar().value(), scroll.verticalScrollBar().value()]
+            for name, scroll in self.scroll_areas.items()
+        }
+        scroll_positions.update(self.pending_scroll_positions)
+        config.save_window_layout(self.saveGeometry(), self.saveState(), scroll_positions)
+
+    def _save_settings(self):
+        self.controller.saveSettings()
+        # closeEvent already captured dock visibility before the window was hidden.
+        if self.isVisible():
+            self._save_layout()
 
     def closeEvent(self, event):
         if self.controller.requestClose():
+            self.controller.saveSettings()
             self._save_layout()
             event.accept()
         else:

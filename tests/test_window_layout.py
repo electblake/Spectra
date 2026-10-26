@@ -83,7 +83,7 @@ def test_layout_is_global_across_config_folders(controller, qapp, tmp_path):
     window.resize(1060, 740)
     chosen = tmp_path / "chosen"
     controller.setConfigFolder(str(chosen))
-    window.save.click()
+    QTest.qWait(400)
     assert config.settings_file().parent == chosen
     assert config.read_window_layout()["geometry"] == window.saveGeometry()
     assert config.read_user_settings()[0] == controller.settings
@@ -231,6 +231,66 @@ def test_reset_layout_restores_all_docks_and_persists(controller, qapp):
     assert restored.dockWidgetArea(restored.sorting_docks[0]) == Qt.DockWidgetArea.TopDockWidgetArea
     assert all(dock.isVisible() and not dock.isFloating() for dock in restored.sorting_docks)
     assert restored.dockWidgetArea(restored.parameters_dock) == Qt.DockWidgetArea.RightDockWidgetArea
+    restored.close()
+    restored.deleteLater()
+    qapp.processEvents()
+
+
+def test_panel_scroll_positions_save_and_restore(controller, qapp):
+    window = MainWindow(controller)
+    window.show()
+    window.resizeDocks([window.sorting_docks[2]], [100], Qt.Orientation.Vertical)
+    QTest.qWait(50)
+    scroll = window.scroll_areas["featuresDock"].verticalScrollBar()
+    assert scroll.maximum() > 0
+    scroll.setValue(scroll.maximum())
+    position = scroll.value()
+    QTest.qWait(400)
+    assert config.read_window_layout()["scroll_positions"]["featuresDock"][1] == position
+    window.close()
+    window.deleteLater()
+    qapp.processEvents()
+    restored = MainWindow(Controller())
+    restored.show()
+    QTest.qWait(50)
+    assert restored.scroll_areas["featuresDock"].verticalScrollBar().value() == position
+    restored.close()
+    restored.deleteLater()
+    qapp.processEvents()
+
+
+def test_scroll_restore_is_cancelled_when_window_is_deleted(controller, qapp, monkeypatch):
+    import sys
+
+    from shiboken6 import delete
+
+    errors = []
+    monkeypatch.setattr(sys, "excepthook", lambda *error: errors.append(error))
+    window = MainWindow(controller)
+    delete(window)
+    QTest.qWait(50)
+    assert errors == []
+
+
+def test_hidden_panel_preserves_scroll_position_across_restart(controller, qapp):
+    window = MainWindow(controller)
+    window.show()
+    dock = window.sorting_docks[2]
+    window.resizeDocks([dock], [100], Qt.Orientation.Vertical)
+    QTest.qWait(50)
+    bar = window.scroll_areas["featuresDock"].verticalScrollBar()
+    bar.setValue(40)
+    assert bar.value() == 40
+    dock.hide()
+    window.close()
+    window.deleteLater()
+    qapp.processEvents()
+    restored = MainWindow(Controller())
+    restored.show()
+    QTest.qWait(50)
+    restored.sorting_docks[2].show()
+    QTest.qWait(50)
+    assert restored.scroll_areas["featuresDock"].verticalScrollBar().value() == 40
     restored.close()
     restored.deleteLater()
     qapp.processEvents()

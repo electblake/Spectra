@@ -65,6 +65,7 @@ class Controller(QObject):
         self.update_available = False
         self.installer_path = None
         self.install_requested = False
+        self.saveSettings()
 
     @Property("QVariantMap", notify=settingsChanged)
     def settings(self):
@@ -77,6 +78,7 @@ class Controller(QObject):
     @Slot(str)
     def setConfigFolder(self, folder):
         self._config_folder = folder
+        self.saveSettings()
         self.settingsChanged.emit()
 
     @Slot()
@@ -132,22 +134,21 @@ class Controller(QObject):
                 settings["prefix_folder_index"] - 1
             ]
         self._settings = settings
+        self.saveSettings()
         self.settingsChanged.emit()
 
     @Slot()
     def saveSettings(self):
         if self.no_profile:
-            self.logMessage.emit("Settings are not saved in -NoProfile mode.")
             return
         config.save_user_settings(config_folder=self._config_folder, **self._settings)
         self.settings_path = config.settings_file()
         self._config_folder = str(self.settings_path.parent)
-        self.settingsChanged.emit()
-        self.logMessage.emit("Settings saved.")
 
     @Slot()
     def restoreDefaults(self):
         self._settings = config.default_settings()
+        self.saveSettings()
         self.settingsChanged.emit()
         self.logMessage.emit("Settings reset to defaults.")
 

@@ -132,3 +132,96 @@ def test_custom_config_folder_survives_restart(tmp_path, monkeypatch):
     loaded, path = json.loads(result.stdout)
     assert loaded == values
     assert path == str(custom / "Spectra.ini")
+
+
+def test_all_controls_save_automatically_and_restore(controller, qapp, tmp_path):
+    from PySide6.QtWidgets import QCheckBox, QComboBox, QLineEdit, QPushButton
+
+    from app.ui.controller import Controller
+    from app.ui.window import MainWindow
+
+    window = MainWindow(controller)
+    values = config.default_settings() | {
+        "feature_workers": 7, "video_workers": 3, "png_compress_level": 5,
+        "resize_optimization": "High", "rgb_weight": 1.25, "hsv_weight": 0.75,
+        "spatial_weight": 0.25, "texture_weight": 1.5, "brightness_weight": 1.75,
+        "aspect_ratio_weight": 0.5, "video_frame_percentage": 23,
+        "dry_run": False, "backup": False, "similarity_threshold": 0.123456,
+        "auto_determine": True, "include_videos": False, "parse_dates": True,
+        "date_pattern": r"\d{4}", "separator": "-", "count_start": 42,
+        "folder_path": "C:/media/parent/photos", "file_prefix": "parent",
+        "prefix_from_folder": True, "prefix_folder_index": -1,
+        "mapping_csv_folder": "{workFolder}/../Data", "overwrite_mapping_csv": True,
+    }
+    assert set(window.fields) == set(values)
+    assert not {"Save Settings", "Restore Defaults"} & {
+        button.text() for button in window.findChildren(QPushButton)
+    }
+    for key, value in values.items():
+        field = window.fields[key]
+        if isinstance(field, QLineEdit):
+            field.setText(value)
+        elif isinstance(field, QCheckBox):
+            field.setChecked(value)
+        elif isinstance(field, QComboBox):
+            field.setCurrentText(value)
+        else:
+            field.setValue(value)
+        assert config.read_user_settings()[0] == controller.settings
+    assert controller.settings == values
+    assert Controller().settings == values
+    result = subprocess.run([
+        sys.executable, "-c",
+        ("import json, sys; from pathlib import Path; from app import config; "
+         "config.user_config_path = lambda *a, **k: Path(sys.argv[1]); "
+         "from app.ui.controller import Controller; print(json.dumps(Controller().settings))"),
+        str(tmp_path),
+    ], check=True, capture_output=True, text=True)
+    assert json.loads(result.stdout) == values
+    window.close()
+    window.deleteLater()
+    qapp.processEvents()
+
+
+def test_quit_flushes_settings_and_pending_layout(tmp_path):
+    for exit_action in ("window.close", "app.quit"):
+        subprocess.run([sys.executable, "-c", """
+import sys
+from pathlib import Path
+from PySide6.QtCore import QTimer, Qt
+from PySide6.QtWidgets import QApplication
+from app import config
+from app.ui.controller import Controller
+from app.ui.window import MainWindow
+config.user_config_path = lambda *a, **k: Path(sys.argv[1])
+app = QApplication(['test', '-platform', 'offscreen:configfile=tests/offscreen.json'])
+window = MainWindow(Controller())
+window.show()
+def finish():
+    window.fields['file_prefix'].setText('quit_saved')
+    config.save_user_settings(**config.default_settings())
+    window.resize(1200, 850)
+    window.move(80, 90)
+    window.move_parameters_left.trigger()
+    window.sorting_docks[2].hide()
+    global geometry, state
+    geometry, state = window.saveGeometry(), window.saveState()
+    assert window.layout_save_timer.isActive()
+    if sys.argv[2] == 'window.close':
+        window.close()
+    else:
+        app.quit()
+QTimer.singleShot(0, finish)
+app.exec()
+assert config.read_user_settings()[0]['file_prefix'] == 'quit_saved'
+layout = config.read_window_layout()
+assert layout['geometry'] == geometry
+assert layout['main_window_state'] == state
+restored = MainWindow(Controller())
+restored.show()
+assert restored.size().width() == 1200
+assert restored.pos().x() == 80
+assert restored.dockWidgetArea(restored.parameters_dock) == Qt.DockWidgetArea.LeftDockWidgetArea
+assert restored.sorting_docks[2].isHidden()
+restored.close()
+""", str(tmp_path), exit_action], check=True, timeout=30)
