@@ -9,7 +9,14 @@ import pytest
 from PIL import Image
 from PySide6.QtCore import QEventLoop, QObject, Qt, QTimer, QUrl
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QFileDialog, QFormLayout, QMessageBox, QPushButton
+from PySide6.QtWidgets import (
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+)
 
 from app import application, config, integrations, main
 from app.events import Log, Progress
@@ -96,7 +103,7 @@ def test_folder_prefix_live_updates_and_persistence(controller, qapp):
 def test_file_menu_select_folder(controller, qapp, monkeypatch, tmp_path):
     window = MainWindow(controller)
     menus = window.menuBar().actions()
-    assert [action.text() for action in menus] == ["&File", "&View"]
+    assert [action.text() for action in menus] == ["&File", "&View", "&Help"]
     assert menus[0].menu().actions() == [window.select_folder]
     folder = tmp_path / "media"
     folder.mkdir()
@@ -189,7 +196,7 @@ def test_settings_config_folder_picker_save_and_open(controller, qapp, tmp_path,
     qapp.processEvents()
 
 
-def test_extras_update_dialog_download_and_install(controller, qapp, monkeypatch, tmp_path):
+def test_help_update_dialog_download_and_install(controller, qapp, monkeypatch, tmp_path):
     import platform
 
     version = "99.0.0"
@@ -221,11 +228,13 @@ def test_extras_update_dialog_download_and_install(controller, qapp, monkeypatch
     monkeypatch.setattr(integrations, "_download_setup", download)
     window = MainWindow(controller)
     window.show()
-    window.parameters_dock.widget().tabs.setCurrentIndex(1)
-    check = next(button for button in window.extras.findChildren(QPushButton)
-                 if button.text() == "Check for Updates")
-    QTest.mouseClick(check, Qt.MouseButton.LeftButton)
+    window.check_updates.trigger()
     dialog = window.update_dialog
+    assert not controller.busy
+    assert not dialog.progress.isVisible()
+    assert config.APP_NAME in [label.text() for label in dialog.findChildren(QLabel)]
+    assert f"Current version: {config.APP_VERSION}" in [label.text() for label in dialog.findChildren(QLabel)]
+    QTest.mouseClick(dialog.check, Qt.MouseButton.LeftButton)
     assert entered.wait(5)
     assert dialog.isVisible()
     assert dialog.progress.maximum() == 0
@@ -253,7 +262,7 @@ def test_extras_update_dialog_download_and_install(controller, qapp, monkeypatch
     qapp.processEvents()
 
 
-def test_relocated_extras_actions_after_reordering(controller, qapp, monkeypatch):
+def test_help_explorer_install_and_release_actions(controller, qapp, monkeypatch):
     entered = threading.Event()
     release = threading.Event()
 
@@ -267,26 +276,31 @@ def test_relocated_extras_actions_after_reordering(controller, qapp, monkeypatch
     monkeypatch.setattr("app.ui.controller.QDesktopServices.openUrl", opened)
     window = MainWindow(controller)
     window.show()
-    tabs = window.parameters_dock.widget().tabs
-    tabs.tabBar().moveTab(1, 0)
-    tabs.setCurrentWidget(window.extras)
-    buttons = {button.text(): button for button in window.extras.findChildren(QPushButton)}
-    QTest.mouseClick(buttons["View Releases"], Qt.MouseButton.LeftButton)
+    help_actions = window.menuBar().actions()[2].menu().actions()
+    assert [action.text() for action in help_actions] == ["Install in File Explorer", "Check for updates"]
+    window.check_updates.trigger()
+    QTest.mouseClick(window.update_dialog.releases, Qt.MouseButton.LeftButton)
     opened.assert_called_once_with(QUrl(integrations.RELEASES_URL))
-    QTest.mouseClick(buttons["Install in File Explorer"], Qt.MouseButton.LeftButton)
+    window.update_dialog.reject()
+    window.install_explorer.trigger()
+    dialog = window.explorer_dialog
+    assert dialog.isVisible()
+    assert not dialog.findChildren(QGroupBox)
+    QTest.mouseClick(dialog.install, Qt.MouseButton.LeftButton)
     assert entered.wait(5)
-    assert not window.extras.isEnabled()
+    assert not dialog.install.isEnabled()
     assert not window.settings_options.isEnabled()
     assert not window.save.isEnabled()
     assert not window.reset.isEnabled()
     release.set()
     finish_task(controller)
     installed.assert_called_once()
-    assert window.extras.isEnabled()
+    assert dialog.install.isEnabled()
     assert window.settings_options.isEnabled()
     assert window.save.isEnabled()
     assert window.reset.isEnabled()
-    assert controller.status == "Installed in File Explorer"
+    assert dialog.status.text() == "Installed in File Explorer"
+    dialog.reject()
     window.close()
     window.deleteLater()
     qapp.processEvents()
@@ -295,9 +309,10 @@ def test_relocated_extras_actions_after_reordering(controller, qapp, monkeypatch
 def test_update_dialog_up_to_date(controller, qapp, monkeypatch):
     monkeypatch.setattr(integrations, "_latest_release", lambda: {"tag_name": f"v{config.APP_VERSION}"})
     window = MainWindow(controller)
-    window._check_updates()
-    finish_task(controller)
+    window.check_updates.trigger()
     dialog = window.update_dialog
+    dialog.check.click()
+    finish_task(controller)
     assert "Up to date" in dialog.status.text()
     assert not dialog.download.isEnabled()
     assert not dialog.install.isEnabled()
@@ -491,7 +506,7 @@ def test_widget_tabs_resize_editing_and_log(controller, qapp):
         start = window.findChild(QObject, "startButton")
         assert start.property("width") > 0
     tabs = window.parameters_dock.widget().tabs
-    assert tabs.count() == 2
+    assert tabs.count() == 1
     assert tabs.isMovable()
     tab_bar = tabs.tabBar()
     assert tabs.currentIndex() == 0
@@ -499,17 +514,9 @@ def test_widget_tabs_resize_editing_and_log(controller, qapp):
     assert window.log.isVisible()
     assert window.save.isVisible()
     QTest.keyClick(tab_bar, Qt.Key.Key_Tab, Qt.KeyboardModifier.ControlModifier)
-    assert tabs.currentIndex() == 1
-    assert not window.save.isVisible()
-    assert window.extras.isVisible()
-    QTest.mouseClick(tab_bar, Qt.MouseButton.LeftButton, pos=tab_bar.tabRect(0).center())
-    parameters = tabs.currentWidget()
-    tab_bar.moveTab(0, 1)
-    assert tabs.widget(1) is parameters
-    assert tabs.widget(0) is window.extras
+    assert tabs.currentIndex() == 0
     assert window.save.isVisible()
     assert window.parameters_dock.isAncestorOf(window.settings_options)
-    assert window.parameters_dock.isAncestorOf(window.extras)
     window.fields["feature_workers"].setValue(6)
     assert controller.settings["feature_workers"] == 6
     assert window.start.isVisible()
@@ -598,7 +605,6 @@ def test_relocated_parameters_save_restore_and_central_content(controller, qapp)
     assert controller.settings["resize_optimization"] == "High"
     window.save.click()
     assert config.read_user_settings()[0] == controller.settings
-    panel.tabs.tabBar().moveTab(0, 1)
     window.reset.click()
     assert controller.settings == config.default_settings()
     for key in values:

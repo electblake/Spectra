@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Moved File Explorer integration from Extras to Help → Install in File Explorer, opening a compact dialog without a group box.
+- Moved updates to Help → Check for updates, with the app name, current version, check and download controls, download progress, and Quit and Install enabled after downloading.
+
+### Removed
+
+- Removed the Extras tab from the Parameters dock.
+
 ## [2.8.2] - 2026-10-25
 
 ### Added

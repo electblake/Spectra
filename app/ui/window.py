@@ -46,7 +46,7 @@ class MainWindow(QMainWindow):
 
         self.parameters_dock = QDockWidget("Parameters", self)
         self.parameters_dock.setObjectName("parametersDock")
-        self.parameters_dock.setWidget(ParametersWidget(self._settings_page(), self._extras_page()))
+        self.parameters_dock.setWidget(ParametersWidget(self._settings_page()))
         self.parameters_dock.setAllowedAreas(
             Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
         )
@@ -71,6 +71,11 @@ class MainWindow(QMainWindow):
         view.addSeparator()
         self.reset_layout = view.addAction("&Reset Layout")
         self.reset_layout.triggered.connect(self._reset_layout)
+        help_menu = self.menuBar().addMenu("&Help")
+        self.install_explorer = help_menu.addAction("Install in File Explorer")
+        self.install_explorer.triggered.connect(self._install_explorer)
+        self.check_updates = help_menu.addAction("Check for updates")
+        self.check_updates.triggered.connect(self._check_updates)
         self.default_layout = self.saveState()
 
         controller.settingsChanged.connect(self._sync_settings)
@@ -297,31 +302,11 @@ class MainWindow(QMainWindow):
         layout.addLayout(actions)
         return page
 
-    def _extras_page(self):
-        self.extras = QWidget()
-        layout = QVBoxLayout(self.extras)
-        explorer = QGroupBox("File Explorer")
-        form = QVBoxLayout(explorer)
-        hint = QLabel("Add Open in Spectra to right-click menus for folders, folder backgrounds, and drives.")
-        hint.setWordWrap(True)
-        form.addWidget(hint)
-        install = QPushButton("Install in File Explorer")
-        install.clicked.connect(self.controller.installExplorer)
-        form.addWidget(install, alignment=Qt.AlignmentFlag.AlignLeft)
-        layout.addWidget(explorer)
-        updates = QGroupBox("Updates")
-        form = QVBoxLayout(updates)
-        self.update_status = QLabel()
-        form.addWidget(self.update_status)
-        check = QPushButton("Check for Updates")
-        check.clicked.connect(self._check_updates)
-        releases = QPushButton("View Releases")
-        releases.clicked.connect(self.controller.viewReleases)
-        form.addWidget(check, alignment=Qt.AlignmentFlag.AlignLeft)
-        form.addWidget(releases, alignment=Qt.AlignmentFlag.AlignLeft)
-        layout.addWidget(updates)
-        layout.addStretch()
-        return self.extras
+    def _install_explorer(self):
+        from app.ui.explorer_dialog import ExplorerDialog
+
+        self.explorer_dialog = ExplorerDialog(self.controller, self)
+        self.explorer_dialog.open()
 
     def _sync_settings(self):
         for key, value in self.controller.settings.items():
@@ -346,7 +331,8 @@ class MainWindow(QMainWindow):
         self.select_folder.setEnabled(not controller.busy)
         for dock in self.sorting_docks:
             dock.widget().setEnabled(not controller.busy)
-        for widget in (self.run_options, self.settings_options, self.extras, self.save, self.reset):
+        for widget in (self.run_options, self.settings_options, self.save, self.reset,
+                       self.install_explorer, self.check_updates):
             widget.setEnabled(not controller.busy)
         self.fields["similarity_threshold"].setEnabled(not settings["auto_determine"])
         self.fields["date_pattern"].setEnabled(settings["parse_dates"])
@@ -356,7 +342,6 @@ class MainWindow(QMainWindow):
         self.open_folder.setEnabled(bool(settings["folder_path"]))
         self.start.setEnabled(not controller.busy and bool(settings["folder_path"]))
         self.stop.setEnabled(controller.cancellable)
-        self.update_status.setText(controller.updateStatus)
         self.statusBar().showMessage(controller.status)
         self.metrics.setText(controller.metrics)
         self.progress.setRange(0, 0 if controller.indeterminate else 100)
@@ -401,7 +386,6 @@ class MainWindow(QMainWindow):
 
         self.update_dialog = UpdateDialog(self.controller, self)
         self.update_dialog.open()
-        self.controller.checkUpdates()
 
     def eventFilter(self, watched, event):
         if watched in (self, *self.sorting_docks, self.parameters_dock) and event.type() in (QEvent.Type.Move, QEvent.Type.Resize, QEvent.Type.WindowStateChange):
